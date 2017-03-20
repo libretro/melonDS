@@ -25,7 +25,8 @@ namespace GPU3D
 typedef struct
 {
     s32 Position[4];
-    u8 Color[3];
+    s32 Color[3];
+    s16 TexCoords[2];
 
     bool Clipped;
 
@@ -35,8 +36,6 @@ typedef struct
     s32 FinalPosition[4];
     s32 FinalColor[3];
 
-    bool ViewportTransformDone;
-
 } Vertex;
 
 typedef struct
@@ -45,12 +44,22 @@ typedef struct
     u32 NumVertices;
 
     u32 Attr;
+    u32 TexParam;
+    u32 TexPalette;
 
     bool FacingView;
+    bool Translucent;
+
+    u32 VTop, VBottom; // vertex indices
+    s32 YTop, YBottom; // Y coords
+    s32 XTop, XBottom; // associated X coords
 
 } Polygon;
 
+extern u32 DispCnt;
+extern u32 AlphaRef;
 extern s32 Viewport[4];
+extern u32 ClearAttr1, ClearAttr2;
 
 bool Init();
 void DeInit();
@@ -63,7 +72,7 @@ void CheckFIFOIRQ();
 void CheckFIFODMA();
 
 void VBlank();
-u8* GetLine(int line);
+u32* GetLine(int line);
 
 u8 Read8(u32 addr);
 u16 Read16(u32 addr);
@@ -80,7 +89,7 @@ void DeInit();
 void Reset();
 
 void RenderFrame(Vertex* vertices, Polygon* polygons, int npolys);
-u8* GetLine(int line);
+u32* GetLine(int line);
 
 }
 

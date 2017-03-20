@@ -29,7 +29,8 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 	system_platform = win
 endif
 
-CORE_DIR    += .
+
+CORE_DIR    += ./src
 TARGET_NAME := melonds
 LIBM		    = -lm
 

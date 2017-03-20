@@ -39,6 +39,12 @@ public:
     void DrawScanline(u32 line);
     void VBlank();
 
+    void BGExtPalDirty(u32 base);
+    void OBJExtPalDirty();
+
+    u16* GetBGExtPal(u32 slot, u32 pal);
+    u16* GetOBJExtPal(u32 pal);
+
 private:
     u32 Num;
     u32* Framebuffer;
@@ -49,19 +55,32 @@ private:
     u16 BGXPos[4];
     u16 BGYPos[4];
 
-    s32 BGXCenter[2];
-    s32 BGYCenter[2];
+    s32 BGXRef[2];
+    s32 BGYRef[2];
+    s32 BGXRefInternal[2];
+    s32 BGYRefInternal[2];
     s16 BGRotA[2];
     s16 BGRotB[2];
     s16 BGRotC[2];
     s16 BGRotD[2];
 
-    u32 BlendFunc;
+    u16 BlendCnt;
+    u8 EVA, EVB;
+    u8 EVY;
+
+    u32 CaptureCnt;
+
+    u16 MasterBrightness;
+
+    u16 BGExtPalCache[4][16*256];
+    u16 OBJExtPalCache[16*256];
+    u32 BGExtPalStatus[4];
+    u32 OBJExtPalStatus;
 
     template<u32 bgmode> void DrawScanlineBGMode(u32 line, u32* spritebuf, u32* dst);
     void DrawScanline_Mode1(u32 line, u32* dst);
 
-    static void DrawPixel_Normal(u32 bgnum, u32* dst, u16 color, u32 blendfunc);
+    void DrawPixel(u32* dst, u16 color, u32 flag);
 
     void DrawBG_3D(u32 line, u32* dst);
     void DrawBG_Text(u32 line, u32* dst, u32 num);
@@ -71,6 +90,8 @@ private:
     void DrawSprites(u32 line, u32* dst);
     void DrawSprite_Rotscale(u16* attrib, u16* rotparams, u32 boundwidth, u32 boundheight, u32 width, u32 height, s32 xpos, u32 ypos, u32* dst);
     void DrawSprite_Normal(u16* attrib, u32 width, s32 xpos, u32 ypos, u32* dst);
+
+    void DoCapture(u32 line, u32 width, u32* src);
 };
 
 #endif

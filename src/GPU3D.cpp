@@ -44,9 +44,14 @@
 //   the added bias affects interpolation.
 //
 // depth buffer:
-// Z-buffering mode: val = ((Z * 0x800 * 0x1000) / W) + 0x7FFCFF
-// W-buffering mode: val = W - 0x1FF
-// TODO: confirm W, because it's weird
+// Z-buffering mode: val = ((Z * 0x800 * 0x1000) / W) + 0x7FFEFF
+// W-buffering mode: val = W
+//
+// formula for clear depth: (GBAtek is wrong there)
+// clearZ = (val * 0x200) + 0x1FF;
+// if (clearZ >= 0x010000 && clearZ < 0xFFFFFF) clearZ++;
+//
+// alpha is 5-bit
 
 
 namespace GPU3D
@@ -138,6 +143,16 @@ FIFO<CmdFIFOEntry>* CmdPIPE;
 
 u32 NumCommands, CurCommand, ParamCount, TotalParams;
 
+u32 DispCnt;
+u32 AlphaRef;
+
+u16 ToonTable[32];
+u16 EdgeTable[8];
+
+u32 FogColor;
+u32 FogOffset;
+u8 FogDensityTable[32];
+
 u32 GXStat;
 
 u32 ExecParams[32];
@@ -159,8 +174,11 @@ s32 Viewport[4];
 
 s32 ProjMatrixStack[16];
 s32 PosMatrixStack[31][16];
+s32 VecMatrixStack[31][16];
+s32 TexMatrixStack[16];
 s32 ProjMatrixStackPointer;
 s32 PosMatrixStackPointer;
+s32 TexMatrixStackPointer;
 
 void MatrixLoadIdentity(s32* m);
 void UpdateClipMatrix();
@@ -169,9 +187,25 @@ void UpdateClipMatrix();
 u32 PolygonMode;
 s16 CurVertex[3];
 u8 VertexColor[3];
+s16 TexCoords[2];
+s16 RawTexCoords[2];
+s16 Normal[3];
+
+s16 LightDirection[4][3];
+u8 LightColor[4][3];
+u8 MatDiffuse[3];
+u8 MatAmbient[3];
+u8 MatSpecular[3];
+u8 MatEmission[3];
+
+bool UseShininessTable;
+u8 ShininessTable[128];
 
 u32 PolygonAttr;
 u32 CurPolygonAttr;
+
+u32 TexParam;
+u32 TexPalette;
 
 Vertex TempVertexBuffer[4];
 u32 VertexNum;
@@ -187,7 +221,10 @@ Polygon* CurPolygonRAM;
 u32 NumVertices, NumPolygons;
 u32 CurRAMBank;
 
+u32 ClearAttr1, ClearAttr2;
+
 u32 FlushRequest;
+u32 FlushAttributes;
 
 
 
@@ -219,6 +256,9 @@ void Reset()
     ParamCount = 0;
     TotalParams = 0;
 
+    DispCnt = 0;
+    AlphaRef = 0;
+
     GXStat = 0;
 
     memset(ExecParams, 0, 32*4);
@@ -240,8 +280,11 @@ void Reset()
 
     memset(ProjMatrixStack, 0, 16*4);
     memset(PosMatrixStack, 0, 31 * 16*4);
+    memset(VecMatrixStack, 0, 31 * 16*4);
+    memset(TexMatrixStack, 0, 16*4);
     ProjMatrixStackPointer = 0;
     PosMatrixStackPointer = 0;
+    TexMatrixStackPointer = 0;
 
     VertexNum = 0;
     VertexNumInPoly = 0;
@@ -252,7 +295,11 @@ void Reset()
     NumVertices = 0;
     NumPolygons = 0;
 
+    ClearAttr1 = 0;
+    ClearAttr2 = 0;
+
     FlushRequest = 0;
+    FlushAttributes = 0;
 
     SoftRenderer::Reset();
 }
@@ -399,19 +446,22 @@ void ClipSegment(Vertex* outbuf, Vertex* vout, Vertex* vin)
     s32 factor_den = factor_num - (vout->Position[3] - (plane*vout->Position[comp]));
 
     Vertex mid;
-#define INTERPOLATE(var)  mid.var = vin->var + (((vout->var - vin->var) * factor_num) / factor_den);
+#define INTERPOLATE(var)  { mid.var = (vin->var + ((vout->var - vin->var) * factor_num) / factor_den); }
 
-    INTERPOLATE(Position[0]);
-    INTERPOLATE(Position[1]);
-    INTERPOLATE(Position[2]);
+    if (comp != 0) INTERPOLATE(Position[0]);
+    if (comp != 1) INTERPOLATE(Position[1]);
+    if (comp != 2) INTERPOLATE(Position[2]);
     INTERPOLATE(Position[3]);
+    mid.Position[comp] = plane*mid.Position[3];
 
     INTERPOLATE(Color[0]);
     INTERPOLATE(Color[1]);
     INTERPOLATE(Color[2]);
 
+    INTERPOLATE(TexCoords[0]);
+    INTERPOLATE(TexCoords[1]);
+
     mid.Clipped = true;
-    mid.ViewportTransformDone = false;
 
 #undef INTERPOLATE
     *outbuf = mid;
@@ -430,39 +480,20 @@ void SubmitPolygon()
 
     // culling
 
-    // checkme: does it work this way for quads and up?
-    /*s32 _x1 = TempVertexBuffer[1].Position[0] - TempVertexBuffer[0].Position[0];
-    s32 _x2 = TempVertexBuffer[2].Position[0] - TempVertexBuffer[0].Position[0];
-    s32 _y1 = TempVertexBuffer[1].Position[1] - TempVertexBuffer[0].Position[1];
-    s32 _y2 = TempVertexBuffer[2].Position[1] - TempVertexBuffer[0].Position[1];
-    s32 _z1 = TempVertexBuffer[1].Position[2] - TempVertexBuffer[0].Position[2];
-    s32 _z2 = TempVertexBuffer[2].Position[2] - TempVertexBuffer[0].Position[2];
-    s32 normalX = (((s64)_y1 * _z2) - ((s64)_z1 * _y2)) >> 12;
-    s32 normalY = (((s64)_z1 * _x2) - ((s64)_x1 * _z2)) >> 12;
-    s32 normalZ = (((s64)_x1 * _y2) - ((s64)_y1 * _x2)) >> 12;*/
-    /*s32 centerX = ((s64)TempVertexBuffer[0].Position[3] * ClipMatrix[12]) >> 12;
-    s32 centerY = ((s64)TempVertexBuffer[0].Position[3] * ClipMatrix[13]) >> 12;
-    s32 centerZ = ((s64)TempVertexBuffer[0].Position[3] * ClipMatrix[14]) >> 12;*/
-    /*s64 dot = ((s64)(-TempVertexBuffer[0].Position[0]) * normalX) +
-              ((s64)(-TempVertexBuffer[0].Position[1]) * normalY) +
-              ((s64)(-TempVertexBuffer[0].Position[2]) * normalZ); // checkme*/
-    // code inspired from Dolphin's software renderer.
-    // maybe not 100% right
-    s32 _x0 = TempVertexBuffer[0].Position[0];
-    s32 _x1 = TempVertexBuffer[1].Position[0];
-    s32 _x2 = TempVertexBuffer[2].Position[0];
-    s32 _y0 = TempVertexBuffer[0].Position[1];
-    s32 _y1 = TempVertexBuffer[1].Position[1];
-    s32 _y2 = TempVertexBuffer[2].Position[1];
-    s32 _z0 = TempVertexBuffer[0].Position[3];
-    s32 _z1 = TempVertexBuffer[1].Position[3];
-    s32 _z2 = TempVertexBuffer[2].Position[3];
-    s32 normalX = (((s64)_y0 * _z2) - ((s64)_z0 * _y2)) >> 12;
-    s32 normalY = (((s64)_z0 * _x2) - ((s64)_x0 * _z2)) >> 12;
-    s32 normalZ = (((s64)_x0 * _y2) - ((s64)_y0 * _x2)) >> 12;
-    s64 dot = ((s64)_x1 * normalX) + ((s64)_y1 * normalY) + ((s64)_z1 * normalZ);
+    Vertex *v0, *v1, *v2;
+    s64 normalX, normalY, normalZ;
+    s64 dot;
+
+    v0 = &TempVertexBuffer[0];
+    v1 = &TempVertexBuffer[1];
+    v2 = &TempVertexBuffer[2];
+    normalX = (((s64)v0->Position[1] * v2->Position[3]) - ((s64)v0->Position[3] * v2->Position[1])) >> 12;
+    normalY = (((s64)v0->Position[3] * v2->Position[0]) - ((s64)v0->Position[0] * v2->Position[3])) >> 12;
+    normalZ = (((s64)v0->Position[0] * v2->Position[1]) - ((s64)v0->Position[1] * v2->Position[0])) >> 12;
+    dot = ((s64)(v1->Position[0] >> 0) * normalX) + ((s64)(v1->Position[1] >> 0) * normalY) + ((s64)(v1->Position[3] >> 0) * normalZ);
+
     bool facingview = (dot < 0);
-//printf("Z: %d %d\n", normalZ, -TempVertexBuffer[0].Position[2]);
+
     if (facingview)
     {
         if (!(CurPolygonAttr & (1<<7)))
@@ -471,7 +502,7 @@ void SubmitPolygon()
             return;
         }
     }
-    else
+    else if (dot > 0)
     {
         if (!(CurPolygonAttr & (1<<6)))
         {
@@ -587,6 +618,15 @@ void SubmitPolygon()
             clippedvertices[1][c++] = vtx;
     }
 
+    for (int i = 0; i < c; i++)
+    {
+        Vertex* vtx = &clippedvertices[1][i];
+
+        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
+        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
+        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
+    }
+
     // Y clipping
 
     nverts = c; c = clipstart;
@@ -643,8 +683,18 @@ void SubmitPolygon()
             clippedvertices[1][c++] = vtx;
     }
 
+    for (int i = 0; i < c; i++)
+    {
+        Vertex* vtx = &clippedvertices[1][i];
+
+        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
+        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
+        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
+    }
+
     // Z clipping
 
+    bool farplaneclip = false;
     nverts = c; c = clipstart;
     for (int i = clipstart; i < nverts; i++)
     {
@@ -654,6 +704,8 @@ void SubmitPolygon()
         Vertex vtx = clippedvertices[1][i];
         if (vtx.Position[2] > vtx.Position[3])
         {
+            farplaneclip = true;
+
             Vertex* vprev = &clippedvertices[1][prev];
             if (vprev->Position[2] <= vprev->Position[3])
             {
@@ -671,6 +723,9 @@ void SubmitPolygon()
         else
             clippedvertices[0][c++] = vtx;
     }
+
+    if (farplaneclip && (!(CurPolygonAttr & (1<<12))))
+        return;
 
     nverts = c; c = clipstart;
     for (int i = clipstart; i < nverts; i++)
@@ -699,6 +754,15 @@ void SubmitPolygon()
             clippedvertices[1][c++] = vtx;
     }
 
+    for (int i = 0; i < c; i++)
+    {
+        Vertex* vtx = &clippedvertices[1][i];
+
+        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
+        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
+        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
+    }
+
     if (c == 0)
     {
         LastStripPolygon = NULL;
@@ -710,6 +774,7 @@ void SubmitPolygon()
     if (NumPolygons >= 2048 || NumVertices+c > 6144)
     {
         LastStripPolygon = NULL;
+        // TODO: set DISP3DCNT overflow flag
         return;
     }
 
@@ -717,7 +782,14 @@ void SubmitPolygon()
     poly->NumVertices = 0;
 
     poly->Attr = CurPolygonAttr;
+    poly->TexParam = TexParam;
+    poly->TexPalette = TexPalette;
+
     poly->FacingView = facingview;
+
+    u32 texfmt = (TexParam >> 26) & 0x7;
+    u32 polyalpha = (CurPolygonAttr >> 16) & 0x1F;
+    poly->Translucent = (texfmt == 1 || texfmt == 6 || (polyalpha > 0 && polyalpha < 31));
 
     if (LastStripPolygon && clipstart > 0)
     {
@@ -743,12 +815,78 @@ void SubmitPolygon()
 
     for (int i = clipstart; i < c; i++)
     {
-        CurVertexRAM[NumVertices] = clippedvertices[1][i];
-        poly->Vertices[i] = &CurVertexRAM[NumVertices];
+        Vertex* vtx = &CurVertexRAM[NumVertices];
+        *vtx = clippedvertices[1][i];
+        poly->Vertices[i] = vtx;
 
         NumVertices++;
         poly->NumVertices++;
+
+        // viewport transform
+        s32 posX, posY, posZ;
+        s32 w = vtx->Position[3];
+        if (w == 0)
+        {
+            posX = 0;
+            posY = 0;
+            posZ = 0;
+            w = 0x1000;
+        }
+        else
+        {
+            posX = (((s64)(vtx->Position[0] + w) * Viewport[2]) / (((s64)w) << 1)) + Viewport[0];
+            posY = (((s64)(-vtx->Position[1] + w) * Viewport[3]) / (((s64)w) << 1)) + Viewport[1];
+
+            if (FlushAttributes & 0x2) posZ = w;
+            else                       posZ = (((s64)vtx->Position[2] * 0x800000) / w) + 0x7FFEFF;
+        }
+
+        if      (posX < 0)        posX = 0;
+        else if (posX > 256)      posX = 256;
+        if      (posY < 0)        posY = 0;
+        else if (posY > 192)      posY = 192;
+        if      (posZ < 0)        posZ = 0;
+        else if (posZ > 0xFFFFFF) posZ = 0xFFFFFF;
+
+        vtx->FinalPosition[0] = posX;
+        vtx->FinalPosition[1] = posY;
+        vtx->FinalPosition[2] = posZ;
+        vtx->FinalPosition[3] = w;
+
+        vtx->FinalColor[0] = vtx->Color[0] >> 12;
+        if (vtx->FinalColor[0]) vtx->FinalColor[0] = ((vtx->FinalColor[0] << 4) + 0xF);
+        vtx->FinalColor[1] = vtx->Color[1] >> 12;
+        if (vtx->FinalColor[1]) vtx->FinalColor[1] = ((vtx->FinalColor[1] << 4) + 0xF);
+        vtx->FinalColor[2] = vtx->Color[2] >> 12;
+        if (vtx->FinalColor[2]) vtx->FinalColor[2] = ((vtx->FinalColor[2] << 4) + 0xF);
     }
+
+    // determine bounds of the polygon
+    u32 vtop = 0, vbot = 0;
+    s32 ytop = 192, ybot = 0;
+    s32 xtop = 256, xbot = 0;
+
+    for (int i = 0; i < c; i++)
+    {
+        Vertex* vtx = poly->Vertices[i];
+
+        if (vtx->FinalPosition[1] < ytop || (vtx->FinalPosition[1] == ytop && vtx->FinalPosition[0] < xtop))
+        {
+            xtop = vtx->FinalPosition[0];
+            ytop = vtx->FinalPosition[1];
+            vtop = i;
+        }
+        if (vtx->FinalPosition[1] > ybot || (vtx->FinalPosition[1] == ybot && vtx->FinalPosition[0] > xbot))
+        {
+            xbot = vtx->FinalPosition[0];
+            ybot = vtx->FinalPosition[1];
+            vbot = i;
+        }
+    }
+
+    poly->VTop = vtop; poly->VBottom = vbot;
+    poly->YTop = ytop; poly->YBottom = ybot;
+    poly->XTop = xtop; poly->XBottom = xbot;
 
     if (PolygonMode >= 2)
         LastStripPolygon = poly;
@@ -767,12 +905,22 @@ void SubmitVertex()
     vertextrans->Position[2] = (vertex[0]*ClipMatrix[2] + vertex[1]*ClipMatrix[6] + vertex[2]*ClipMatrix[10] + vertex[3]*ClipMatrix[14]) >> 12;
     vertextrans->Position[3] = (vertex[0]*ClipMatrix[3] + vertex[1]*ClipMatrix[7] + vertex[2]*ClipMatrix[11] + vertex[3]*ClipMatrix[15]) >> 12;
 
-    vertextrans->Color[0] = VertexColor[0];
-    vertextrans->Color[1] = VertexColor[1];
-    vertextrans->Color[2] = VertexColor[2];
+    vertextrans->Color[0] = (VertexColor[0] << 12) + 0xFFF;
+    vertextrans->Color[1] = (VertexColor[1] << 12) + 0xFFF;
+    vertextrans->Color[2] = (VertexColor[2] << 12) + 0xFFF;
+
+    if ((TexParam >> 30) == 3)
+    {
+        vertextrans->TexCoords[0] = (vertex[0]*TexMatrix[0] + vertex[1]*TexMatrix[4] + vertex[2]*TexMatrix[8] + vertex[3]*(RawTexCoords[0]<<8)) >> 20;
+        vertextrans->TexCoords[1] = (vertex[0]*TexMatrix[1] + vertex[1]*TexMatrix[5] + vertex[2]*TexMatrix[9] + vertex[3]*(RawTexCoords[1]<<8)) >> 20;
+    }
+    else
+    {
+        vertextrans->TexCoords[0] = TexCoords[0];
+        vertextrans->TexCoords[1] = TexCoords[1];
+    }
 
     vertextrans->Clipped = false;
-    vertextrans->ViewportTransformDone = false;
 
     VertexNum++;
     VertexNumInPoly++;
@@ -837,6 +985,73 @@ void SubmitVertex()
         }
         break;
     }
+}
+
+s32 CalculateLighting()
+{
+    if ((TexParam >> 30) == 2)
+    {
+        TexCoords[0] = RawTexCoords[0] + (((s64)Normal[0]*TexMatrix[0] + (s64)Normal[1]*TexMatrix[4] + (s64)Normal[2]*TexMatrix[8]) >> 21);
+        TexCoords[1] = RawTexCoords[1] + (((s64)Normal[0]*TexMatrix[1] + (s64)Normal[1]*TexMatrix[5] + (s64)Normal[2]*TexMatrix[9]) >> 21);
+    }
+
+    s32 normaltrans[3];
+    normaltrans[0] = (Normal[0]*VecMatrix[0] + Normal[1]*VecMatrix[4] + Normal[2]*VecMatrix[8]) >> 12;
+    normaltrans[1] = (Normal[0]*VecMatrix[1] + Normal[1]*VecMatrix[5] + Normal[2]*VecMatrix[9]) >> 12;
+    normaltrans[2] = (Normal[0]*VecMatrix[2] + Normal[1]*VecMatrix[6] + Normal[2]*VecMatrix[10]) >> 12;
+
+    VertexColor[0] = MatEmission[0];
+    VertexColor[1] = MatEmission[1];
+    VertexColor[2] = MatEmission[2];
+
+    s32 c = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        if (!(CurPolygonAttr & (1<<i)))
+            continue;
+
+        s32 difflevel = (-(LightDirection[i][0]*normaltrans[0] +
+                         LightDirection[i][1]*normaltrans[1] +
+                         LightDirection[i][2]*normaltrans[2])) >> 10;
+        if (difflevel < 0) difflevel = 0;
+        else if (difflevel > 255) difflevel = 255;
+
+        s32 shinelevel = -(((LightDirection[i][0]>>1)*normaltrans[0] +
+                          (LightDirection[i][1]>>1)*normaltrans[1] +
+                          ((LightDirection[i][2]-0x200)>>1)*normaltrans[2]) >> 10);
+        if (shinelevel < 0) shinelevel = 0;
+        shinelevel = ((shinelevel * shinelevel) >> 7) - 0x100; // really (2*shinelevel*shinelevel)-1
+        if (shinelevel < 0) shinelevel = 0;
+        else if (shinelevel > 255) shinelevel = 255;
+
+        if (UseShininessTable)
+        {
+            // checkme
+            shinelevel >>= 1;
+            shinelevel = ShininessTable[shinelevel];
+        }
+
+        VertexColor[0] += ((MatSpecular[0] * LightColor[i][0] * shinelevel) >> 13);
+        VertexColor[0] += ((MatDiffuse[0] * LightColor[i][0] * difflevel) >> 13);
+        VertexColor[0] += ((MatAmbient[0] * LightColor[i][0]) >> 5);
+
+        VertexColor[1] += ((MatSpecular[1] * LightColor[i][1] * shinelevel) >> 13);
+        VertexColor[1] += ((MatDiffuse[1] * LightColor[i][1] * difflevel) >> 13);
+        VertexColor[1] += ((MatAmbient[1] * LightColor[i][1]) >> 5);
+
+        VertexColor[2] += ((MatSpecular[2] * LightColor[i][2] * shinelevel) >> 13);
+        VertexColor[2] += ((MatDiffuse[2] * LightColor[i][2] * difflevel) >> 13);
+        VertexColor[2] += ((MatAmbient[2] * LightColor[i][2]) >> 5);
+
+        if (VertexColor[0] > 31) VertexColor[0] = 31;
+        if (VertexColor[1] > 31) VertexColor[1] = 31;
+        if (VertexColor[2] > 31) VertexColor[2] = 31;
+
+        c++;
+    }
+
+    // checkme: cycle count
+    return c;
 }
 
 
@@ -928,8 +1143,16 @@ void ExecuteCommand()
             }
             else if (MatrixMode == 3)
             {
-                printf("!! CAN'T PUSH TEXTURE MATRIX\n");
-                GXStat |= (1<<15); // CHECKME
+                if (TexMatrixStackPointer > 0)
+                {
+                    printf("!! TEX MATRIX STACK OVERFLOW\n");
+                    GXStat |= (1<<15);
+                    break;
+                }
+
+                memcpy(TexMatrixStack, TexMatrix, 16*4);
+                TexMatrixStackPointer++;
+                GXStat |= (1<<14);
             }
             else
             {
@@ -941,6 +1164,8 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrixStack[PosMatrixStackPointer], PosMatrix, 16*4);
+                if (MatrixMode == 2)
+                    memcpy(VecMatrixStack[PosMatrixStackPointer], VecMatrix, 16*4);
                 PosMatrixStackPointer++;
                 GXStat |= (1<<14);
             }
@@ -963,8 +1188,16 @@ void ExecuteCommand()
             }
             else if (MatrixMode == 3)
             {
-                printf("!! CAN'T POP TEXTURE MATRIX\n");
-                GXStat |= (1<<15); // CHECKME
+                if (TexMatrixStackPointer <= 0)
+                {
+                    printf("!! TEX MATRIX STACK UNDERFLOW\n");
+                    GXStat |= (1<<15);
+                    break;
+                }
+
+                TexMatrixStackPointer--;
+                memcpy(TexMatrix, TexMatrixStack, 16*4);
+                GXStat |= (1<<14);
             }
             else
             {
@@ -980,6 +1213,8 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrix, PosMatrixStack[PosMatrixStackPointer], 16*4);
+                if (MatrixMode == 2)
+                    memcpy(VecMatrix, VecMatrixStack[PosMatrixStackPointer], 16*4);
                 GXStat |= (1<<14);
                 ClipMatrixDirty = true;
             }
@@ -992,8 +1227,7 @@ void ExecuteCommand()
             }
             else if (MatrixMode == 3)
             {
-                printf("!! CAN'T STORE TEXTURE MATRIX\n");
-                GXStat |= (1<<15); // CHECKME
+                memcpy(TexMatrixStack, TexMatrix, 16*4);
             }
             else
             {
@@ -1006,6 +1240,8 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrixStack[addr], PosMatrix, 16*4);
+                if (MatrixMode == 2)
+                    memcpy(VecMatrixStack[addr], VecMatrix, 16*4);
             }
             break;
 
@@ -1017,8 +1253,7 @@ void ExecuteCommand()
             }
             else if (MatrixMode == 3)
             {
-                printf("!! CAN'T RESTORE TEXTURE MATRIX\n");
-                GXStat |= (1<<15); // CHECKME
+                memcpy(TexMatrix, TexMatrixStack, 16*4);
             }
             else
             {
@@ -1031,6 +1266,8 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrix, PosMatrixStack[addr], 16*4);
+                if (MatrixMode == 2)
+                    memcpy(VecMatrix, VecMatrixStack[addr], 16*4);
                 ClipMatrixDirty = true;
             }
             break;
@@ -1190,8 +1427,26 @@ void ExecuteCommand()
             }
             break;
 
-        case 0x21:
-            // TODO: more cycles if lights are enabled
+        case 0x21: // normal
+            Normal[0] = (s16)((ExecParams[0] & 0x000003FF) << 6) >> 6;
+            Normal[1] = (s16)((ExecParams[0] & 0x000FFC00) >> 4) >> 6;
+            Normal[2] = (s16)((ExecParams[0] & 0x3FF00000) >> 14) >> 6;
+            CycleCount += CalculateLighting();
+            break;
+
+        case 0x22: // texcoord
+            RawTexCoords[0] = ExecParams[0] & 0xFFFF;
+            RawTexCoords[1] = ExecParams[0] >> 16;
+            if ((TexParam >> 30) == 1)
+            {
+                TexCoords[0] = (RawTexCoords[0]*TexMatrix[0] + RawTexCoords[1]*TexMatrix[4] + TexMatrix[8] + TexMatrix[12]) >> 12;
+                TexCoords[1] = (RawTexCoords[0]*TexMatrix[1] + RawTexCoords[1]*TexMatrix[5] + TexMatrix[9] + TexMatrix[13]) >> 12;
+            }
+            else
+            {
+                TexCoords[0] = RawTexCoords[0];
+                TexCoords[1] = RawTexCoords[1];
+            }
             break;
 
         case 0x23: // full vertex
@@ -1237,7 +1492,75 @@ void ExecuteCommand()
             PolygonAttr = ExecParams[0];
             break;
 
-        case 0x40:
+        case 0x2A: // texture param
+            TexParam = ExecParams[0];
+            break;
+
+        case 0x2B: // texture palette
+            TexPalette = ExecParams[0] & 0x1FFF;
+            break;
+
+        case 0x30: // diffuse/ambient material
+            MatDiffuse[0] = ExecParams[0] & 0x1F;
+            MatDiffuse[1] = (ExecParams[0] >> 5) & 0x1F;
+            MatDiffuse[2] = (ExecParams[0] >> 10) & 0x1F;
+            MatAmbient[0] = (ExecParams[0] >> 16) & 0x1F;
+            MatAmbient[1] = (ExecParams[0] >> 21) & 0x1F;
+            MatAmbient[2] = (ExecParams[0] >> 26) & 0x1F;
+            if (ExecParams[0] & 0x8000)
+            {
+                VertexColor[0] = MatDiffuse[0];
+                VertexColor[1] = MatDiffuse[1];
+                VertexColor[2] = MatDiffuse[2];
+            }
+            break;
+
+        case 0x31: // specular/emission material
+            MatSpecular[0] = ExecParams[0] & 0x1F;
+            MatSpecular[1] = (ExecParams[0] >> 5) & 0x1F;
+            MatSpecular[2] = (ExecParams[0] >> 10) & 0x1F;
+            MatEmission[0] = (ExecParams[0] >> 16) & 0x1F;
+            MatEmission[1] = (ExecParams[0] >> 21) & 0x1F;
+            MatEmission[2] = (ExecParams[0] >> 26) & 0x1F;
+            UseShininessTable = (ExecParams[0] & 0x8000) != 0;
+            break;
+
+        case 0x32: // light direction
+            {
+                u32 l = ExecParams[0] >> 30;
+                s16 dir[3];
+                dir[0] = (s16)((ExecParams[0] & 0x000003FF) << 6) >> 6;
+                dir[1] = (s16)((ExecParams[0] & 0x000FFC00) >> 4) >> 6;
+                dir[2] = (s16)((ExecParams[0] & 0x3FF00000) >> 14) >> 6;
+                LightDirection[l][0] = (dir[0]*VecMatrix[0] + dir[1]*VecMatrix[4] + dir[2]*VecMatrix[8]) >> 12;
+                LightDirection[l][1] = (dir[0]*VecMatrix[1] + dir[1]*VecMatrix[5] + dir[2]*VecMatrix[9]) >> 12;
+                LightDirection[l][2] = (dir[0]*VecMatrix[2] + dir[1]*VecMatrix[6] + dir[2]*VecMatrix[10]) >> 12;
+            }
+            break;
+
+        case 0x33: // light color
+            {
+                u32 l = ExecParams[0] >> 30;
+                LightColor[l][0] = ExecParams[0] & 0x1F;
+                LightColor[l][1] = (ExecParams[0] >> 5) & 0x1F;
+                LightColor[l][2] = (ExecParams[0] >> 10) & 0x1F;
+            }
+            break;
+
+        case 0x34: // shininess table
+            {
+                for (int i = 0; i < 128; i += 4)
+                {
+                    u32 val = ExecParams[i >> 2];
+                    ShininessTable[i + 0] = val & 0xFF;
+                    ShininessTable[i + 1] = (val >> 8) & 0xFF;
+                    ShininessTable[i + 2] = (val >> 16) & 0xFF;
+                    ShininessTable[i + 3] = val >> 24;
+                }
+            }
+            break;
+
+        case 0x40: // begin polygons
             PolygonMode = ExecParams[0] & 0x3;
             VertexNum = 0;
             VertexNumInPoly = 0;
@@ -1246,8 +1569,9 @@ void ExecuteCommand()
             CurPolygonAttr = PolygonAttr;
             break;
 
-        case 0x50:
-            FlushRequest = 1;//0x80000000 | (ExecParams[0] & 0x3);
+        case 0x50: // flush
+            FlushRequest = 1;
+            FlushAttributes = ExecParams[0] & 0x3;
             CycleCount = 392;
             break;
 
@@ -1256,6 +1580,11 @@ void ExecuteCommand()
             Viewport[1] = (ExecParams[0] >> 8) & 0xFF;
             Viewport[2] = ((ExecParams[0] >> 16) & 0xFF) - Viewport[0] + 1;
             Viewport[3] = (ExecParams[0] >> 24) - Viewport[1] + 1;
+            break;
+
+        default:
+            //if (entry.Command != 0x41)
+                //printf("!! UNKNOWN GX COMMAND %02X %08X\n", entry.Command, entry.Param);
             break;
         }
     }
@@ -1293,7 +1622,8 @@ void CheckFIFOIRQ()
     case 2: irq = CmdFIFO->IsEmpty(); break;
     }
 
-    if (irq) NDS::TriggerIRQ(0, NDS::IRQ_GXFIFO);
+    if (irq) NDS::SetIRQ(0, NDS::IRQ_GXFIFO);
+    else     NDS::ClearIRQ(0, NDS::IRQ_GXFIFO);
 }
 
 void CheckFIFODMA()
@@ -1320,7 +1650,7 @@ void VBlank()
     }
 }
 
-u8* GetLine(int line)
+u32* GetLine(int line)
 {
     return SoftRenderer::GetLine(line);
 }
@@ -1328,11 +1658,19 @@ u8* GetLine(int line)
 
 u8 Read8(u32 addr)
 {
+    printf("unknown GPU3D read8 %08X\n", addr);
     return 0;
 }
 
 u16 Read16(u32 addr)
 {
+    switch (addr)
+    {
+    case 0x04000060:
+        return DispCnt;
+    }
+
+    printf("unknown GPU3D read16 %08X\n", addr);
     return 0;
 }
 
@@ -1340,6 +1678,9 @@ u32 Read32(u32 addr)
 {
     switch (addr)
     {
+    case 0x04000060:
+        return DispCnt;
+
     case 0x04000320:
         return 46; // TODO, eventually
 
@@ -1354,6 +1695,16 @@ u32 Read32(u32 addr)
                    (fifolevel < 128 ? (1<<25) : 0) |
                    (fifolevel == 0  ? (1<<26) : 0);
         }
+
+    case 0x04000680: return VecMatrix[0];
+    case 0x04000684: return VecMatrix[1];
+    case 0x04000688: return VecMatrix[2];
+    case 0x0400068C: return VecMatrix[4];
+    case 0x04000690: return VecMatrix[5];
+    case 0x04000694: return VecMatrix[6];
+    case 0x04000698: return VecMatrix[8];
+    case 0x0400069C: return VecMatrix[9];
+    case 0x040006A0: return VecMatrix[10];
     }
 
     if (addr >= 0x04000640 && addr < 0x04000680)
@@ -1361,34 +1712,126 @@ u32 Read32(u32 addr)
         UpdateClipMatrix();
         return ClipMatrix[(addr & 0x3C) >> 2];
     }
-    if (addr >= 0x04000680 && addr < 0x040006A4)
-    {
-        printf("!! VECMTX READ\n");
-        return 0;
-    }
 
+    //printf("unknown GPU3D read32 %08X\n", addr);
     return 0;
 }
 
 void Write8(u32 addr, u8 val)
 {
-    //
+    switch (addr)
+    {
+    case 0x04000340:
+        AlphaRef = val & 0x1F;
+        return;
+    }
+
+    if (addr >= 0x04000360 && addr < 0x04000380)
+    {
+        FogDensityTable[addr - 0x04000360] = val;
+        return;
+    }
+
+    printf("unknown GPU3D write8 %08X %02X\n", addr, val);
 }
 
 void Write16(u32 addr, u16 val)
 {
-    //
+    switch (addr)
+    {
+    case 0x04000060:
+        DispCnt = val;
+        return;
+
+    case 0x04000340:
+        AlphaRef = val & 0x1F;
+        return;
+
+    case 0x04000350:
+        ClearAttr1 = (ClearAttr1 & 0xFFFF0000) | val;
+        return;
+    case 0x04000352:
+        ClearAttr1 = (ClearAttr1 & 0xFFFF) | (val << 16);
+        return;
+    case 0x04000354:
+        ClearAttr2 = (ClearAttr2 & 0xFFFF0000) | val;
+        return;
+    case 0x04000356:
+        ClearAttr2 = (ClearAttr2 & 0xFFFF) | (val << 16);
+        return;
+
+    case 0x04000358:
+        FogColor = (FogColor & 0xFFFF0000) | val;
+        return;
+    case 0x0400035A:
+        FogColor = (FogColor & 0xFFFF) | (val << 16);
+        return;
+    case 0x0400035C:
+        FogOffset = val;
+        return;
+    }
+
+    if (addr >= 0x04000330 && addr < 0x04000340)
+    {
+        EdgeTable[(addr - 0x04000330) >> 1] = val;
+        return;
+    }
+
+    if (addr >= 0x04000360 && addr < 0x04000380)
+    {
+        addr -= 0x04000360;
+        FogDensityTable[addr] = val & 0xFF;
+        FogDensityTable[addr+1] = val >> 8;
+        return;
+    }
+
+    if (addr >= 0x04000380 && addr < 0x040003C0)
+    {
+        ToonTable[(addr - 0x04000380) >> 1] = val;
+        return;
+    }
+
+    printf("unknown GPU3D write16 %08X %04X\n", addr, val);
 }
 
 void Write32(u32 addr, u32 val)
 {
     switch (addr)
     {
+    case 0x04000060:
+        DispCnt = val & 0xFFFF;
+        return;
+
+    case 0x04000340:
+        AlphaRef = val & 0x1F;
+        return;
+
+    case 0x04000350:
+        ClearAttr1 = val;
+        return;
+    case 0x04000354:
+        ClearAttr2 = val;
+        return;
+
+    case 0x04000358:
+        FogColor = val;
+        return;
+    case 0x0400035C:
+        FogOffset = val;
+        return;
+
     case 0x04000600:
-        if (val & 0x8000) GXStat &= ~0x8000;
+        if (val & 0x8000)
+        {
+            GXStat &= ~0x8000;
+            ProjMatrixStackPointer = 0;
+            //PosMatrixStackPointer = 0;
+            TexMatrixStackPointer = 0;
+        }
         val &= 0xC0000000;
         GXStat &= 0x3FFFFFFF;
         GXStat |= val;
+        CheckFIFOIRQ();
         return;
     }
 
@@ -1408,7 +1851,7 @@ void Write32(u32 addr, u32 val)
 
         for (;;)
         {
-            if ((CurCommand & 0xFF) || (NumCommands == 4))
+            if ((CurCommand & 0xFF) || (NumCommands == 4 && CurCommand == 0))
             {
                 CmdFIFOEntry entry;
                 entry.Command = CurCommand & 0xFF;
@@ -1440,6 +1883,34 @@ void Write32(u32 addr, u32 val)
         CmdFIFOWrite(entry);
         return;
     }
+
+    if (addr >= 0x04000330 && addr < 0x04000340)
+    {
+        addr = (addr - 0x04000330) >> 1;
+        EdgeTable[addr] = val & 0xFFFF;
+        EdgeTable[addr+1] = val >> 16;
+        return;
+    }
+
+    if (addr >= 0x04000360 && addr < 0x04000380)
+    {
+        addr -= 0x04000360;
+        FogDensityTable[addr] = val & 0xFF;
+        FogDensityTable[addr+1] = (val >> 8) & 0xFF;
+        FogDensityTable[addr+2] = (val >> 16) & 0xFF;
+        FogDensityTable[addr+3] = val >> 24;
+        return;
+    }
+
+    if (addr >= 0x04000380 && addr < 0x040003C0)
+    {
+        addr = (addr - 0x04000380) >> 1;
+        ToonTable[addr] = val & 0xFFFF;
+        ToonTable[addr+1] = val >> 16;
+        return;
+    }
+
+    printf("unknown GPU3D write32 %08X %08X\n", addr, val);
 }
 
 }

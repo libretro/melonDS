@@ -139,7 +139,6 @@ bool Init()
     if (!SPI::Init()) return false;
     if (!RTC::Init()) return false;
 
-    Reset();
     return true;
 }
 
@@ -322,17 +321,14 @@ void Reset()
     KeyInput = 0x007F03FF;
 
     _soundbias = 0;
+}
 
-    // test
-    //LoadROM();
-    //LoadFirmware();
-#ifdef __LIBRETRO__
-    if (NDSCart::LoadROM(retro_game_path))
-        Running = true; // hax
-#else 
-    if (NDSCart::LoadROM("rom/sm64ds.nds"))
-        Running = true; // hax
-#endif
+void LoadROM(const char* path, bool direct)
+{
+    Reset();
+
+    if (NDSCart::LoadROM(path, direct))
+        Running = true;
 }
 
 
@@ -393,7 +389,7 @@ void RunFrame()
 
         CalcIterationCycles();
 
-        if (CPUStop & 0x1)
+        if (CPUStop & 0xFFFF)
         {
             s32 cycles = CurIterationCycles;
             cycles = DMAs[0]->Run(cycles);
@@ -412,7 +408,7 @@ void RunFrame()
             ndscyclestorun = ARM9->Cycles >> 1;
         }
 
-        if (CPUStop & 0x2)
+        if (CPUStop & 0xFFFF0000)
         {
             s32 cycles = ndscyclestorun - ARM7Offset;
             cycles = DMAs[4]->Run(cycles);
@@ -548,14 +544,14 @@ void MapSharedWRAM(u8 val)
 }
 
 
-void TriggerIRQ(u32 cpu, u32 irq)
+void SetIRQ(u32 cpu, u32 irq)
 {
-    irq = 1 << irq;
-    IF[cpu] |= irq;
+    IF[cpu] |= (1 << irq);
+}
 
-    // this is redundant
-    if (!(IME[cpu] & 0x1)) return;
-    //(cpu?ARM7:ARM9)->TriggerIRQ();
+void ClearIRQ(u32 cpu, u32 irq)
+{
+    IF[cpu] &= ~(1 << irq);
 }
 
 bool HaltInterrupted(u32 cpu)
@@ -572,10 +568,16 @@ bool HaltInterrupted(u32 cpu)
     return false;
 }
 
-void StopCPU(u32 cpu, bool stop)
+void StopCPU(u32 cpu, u32 mask)
 {
-    if (stop) CPUStop |=  (1<<cpu);
-    else      CPUStop &= ~(1<<cpu);
+    if (cpu) mask <<= 16;
+    CPUStop |= mask;
+}
+
+void ResumeCPU(u32 cpu, u32 mask)
+{
+    if (cpu) mask <<= 16;
+    CPUStop &= ~mask;
 }
 
 
@@ -626,7 +628,7 @@ void TimerOverflow(u32 param)
             timer->Counter = timer->Reload << 16;
 
             if (timer->Cnt & (1<<6))
-                TriggerIRQ(cpu, IRQ_Timer0 + tid);
+                SetIRQ(cpu, IRQ_Timer0 + tid);
 
             // cascade
             if (tid == 3)
@@ -795,6 +797,9 @@ void debug(u32 param)
 {
     printf("ARM9 PC=%08X LR=%08X %08X\n", ARM9->R[15], ARM9->R[14], ARM9->R_IRQ[1]);
     printf("ARM7 PC=%08X LR=%08X %08X\n", ARM7->R[15], ARM7->R[14], ARM7->R_IRQ[1]);
+
+    for (int i = 0; i < 9; i++)
+        printf("VRAM %c: %02X\n", 'A'+i, GPU::VRAMCNT[i]);
 }
 
 
@@ -823,18 +828,14 @@ u8 ARM9Read8(u32 addr)
 
     case 0x06000000:
         {
-            u32 chunk = (addr >> 14) & 0x7F;
-            u8* vram = NULL;
             switch (addr & 0x00E00000)
             {
-            case 0x00000000: vram = GPU::VRAM_ABG[chunk]; break;
-            case 0x00200000: vram = GPU::VRAM_BBG[chunk]; break;
-            case 0x00400000: vram = GPU::VRAM_AOBJ[chunk]; break;
-            case 0x00600000: vram = GPU::VRAM_BOBJ[chunk]; break;
-            case 0x00800000: vram = GPU::VRAM_LCD[chunk]; break;
+            case 0x00000000: return GPU::ReadVRAM_ABG<u8>(addr);
+            case 0x00200000: return GPU::ReadVRAM_BBG<u8>(addr);
+            case 0x00400000: return GPU::ReadVRAM_AOBJ<u8>(addr);
+            case 0x00600000: return GPU::ReadVRAM_BOBJ<u8>(addr);
+            default:         return GPU::ReadVRAM_LCDC<u8>(addr);
             }
-            if (vram)
-                return *(u8*)&vram[addr & 0x3FFF];
         }
         return 0;
 
@@ -874,18 +875,14 @@ u16 ARM9Read16(u32 addr)
 
     case 0x06000000:
         {
-            u32 chunk = (addr >> 14) & 0x7F;
-            u8* vram = NULL;
             switch (addr & 0x00E00000)
             {
-            case 0x00000000: vram = GPU::VRAM_ABG[chunk]; break;
-            case 0x00200000: vram = GPU::VRAM_BBG[chunk]; break;
-            case 0x00400000: vram = GPU::VRAM_AOBJ[chunk]; break;
-            case 0x00600000: vram = GPU::VRAM_BOBJ[chunk]; break;
-            case 0x00800000: vram = GPU::VRAM_LCD[chunk]; break;
+            case 0x00000000: return GPU::ReadVRAM_ABG<u16>(addr);
+            case 0x00200000: return GPU::ReadVRAM_BBG<u16>(addr);
+            case 0x00400000: return GPU::ReadVRAM_AOBJ<u16>(addr);
+            case 0x00600000: return GPU::ReadVRAM_BOBJ<u16>(addr);
+            default:         return GPU::ReadVRAM_LCDC<u16>(addr);
             }
-            if (vram)
-                return *(u16*)&vram[addr & 0x3FFF];
         }
         return 0;
 
@@ -925,18 +922,14 @@ u32 ARM9Read32(u32 addr)
 
     case 0x06000000:
         {
-            u32 chunk = (addr >> 14) & 0x7F;
-            u8* vram = NULL;
             switch (addr & 0x00E00000)
             {
-            case 0x00000000: vram = GPU::VRAM_ABG[chunk]; break;
-            case 0x00200000: vram = GPU::VRAM_BBG[chunk]; break;
-            case 0x00400000: vram = GPU::VRAM_AOBJ[chunk]; break;
-            case 0x00600000: vram = GPU::VRAM_BOBJ[chunk]; break;
-            case 0x00800000: vram = GPU::VRAM_LCD[chunk]; break;
+            case 0x00000000: return GPU::ReadVRAM_ABG<u32>(addr);
+            case 0x00200000: return GPU::ReadVRAM_BBG<u32>(addr);
+            case 0x00400000: return GPU::ReadVRAM_AOBJ<u32>(addr);
+            case 0x00600000: return GPU::ReadVRAM_BOBJ<u32>(addr);
+            default:         return GPU::ReadVRAM_LCDC<u32>(addr);
             }
-            if (vram)
-                return *(u32*)&vram[addr & 0x3FFF];
         }
         return 0;
 
@@ -998,19 +991,13 @@ void ARM9Write16(u32 addr, u16 val)
         return;
 
     case 0x06000000:
+        switch (addr & 0x00E00000)
         {
-            u32 chunk = (addr >> 14) & 0x7F;
-            u8* vram = NULL;
-            switch (addr & 0x00E00000)
-            {
-            case 0x00000000: vram = GPU::VRAM_ABG[chunk]; break;
-            case 0x00200000: vram = GPU::VRAM_BBG[chunk]; break;
-            case 0x00400000: vram = GPU::VRAM_AOBJ[chunk]; break;
-            case 0x00600000: vram = GPU::VRAM_BOBJ[chunk]; break;
-            case 0x00800000: vram = GPU::VRAM_LCD[chunk]; break;
-            }
-            if (vram)
-                *(u16*)&vram[addr & 0x3FFF] = val;
+        case 0x00000000: GPU::WriteVRAM_ABG<u16>(addr, val); break;
+        case 0x00200000: GPU::WriteVRAM_BBG<u16>(addr, val); break;
+        case 0x00400000: GPU::WriteVRAM_AOBJ<u16>(addr, val); break;
+        case 0x00600000: GPU::WriteVRAM_BOBJ<u16>(addr, val); break;
+        default:         GPU::WriteVRAM_LCDC<u16>(addr, val); break;
         }
         return;
 
@@ -1043,19 +1030,13 @@ void ARM9Write32(u32 addr, u32 val)
         return;
 
     case 0x06000000:
+        switch (addr & 0x00E00000)
         {
-            u32 chunk = (addr >> 14) & 0x7F;
-            u8* vram = NULL;
-            switch (addr & 0x00E00000)
-            {
-            case 0x00000000: vram = GPU::VRAM_ABG[chunk]; break;
-            case 0x00200000: vram = GPU::VRAM_BBG[chunk]; break;
-            case 0x00400000: vram = GPU::VRAM_AOBJ[chunk]; break;
-            case 0x00600000: vram = GPU::VRAM_BOBJ[chunk]; break;
-            case 0x00800000: vram = GPU::VRAM_LCD[chunk]; break;
-            }
-            if (vram)
-                *(u32*)&vram[addr & 0x3FFF] = val;
+        case 0x00000000: GPU::WriteVRAM_ABG<u32>(addr, val); break;
+        case 0x00200000: GPU::WriteVRAM_BBG<u32>(addr, val); break;
+        case 0x00400000: GPU::WriteVRAM_AOBJ<u32>(addr, val); break;
+        case 0x00600000: GPU::WriteVRAM_BOBJ<u32>(addr, val); break;
+        default:         GPU::WriteVRAM_LCDC<u32>(addr, val); break;
         }
         return;
 
@@ -1099,13 +1080,7 @@ u8 ARM7Read8(u32 addr)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                return *(u8*)&vram[addr & 0x1FFFF];
-        }
-        return 0;
+        return GPU::ReadVRAM_ARM7<u8>(addr);
     }
 
     printf("unknown arm7 read8 %08X %08X %08X/%08X\n", addr, ARM7->R[15], ARM7->R[0], ARM7->R[1]);
@@ -1145,13 +1120,7 @@ u16 ARM7Read16(u32 addr)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                return *(u16*)&vram[addr & 0x1FFFF];
-        }
-        return 0;
+        return GPU::ReadVRAM_ARM7<u16>(addr);
     }
 
     printf("unknown arm7 read16 %08X %08X\n", addr, ARM7->R[15]);
@@ -1188,13 +1157,7 @@ u32 ARM7Read32(u32 addr)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                return *(u32*)&vram[addr & 0x1FFFF];
-        }
-        return 0;
+        return GPU::ReadVRAM_ARM7<u32>(addr);
     }
 
     printf("unknown arm7 read32 %08X | %08X\n", addr, ARM7->R[15]);
@@ -1225,12 +1188,7 @@ void ARM7Write8(u32 addr, u8 val)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                *(u8*)&vram[addr & 0x1FFFF] = val;
-        }
+        GPU::WriteVRAM_ARM7<u8>(addr, val);
         return;
     }
 
@@ -1265,12 +1223,7 @@ void ARM7Write16(u32 addr, u16 val)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                *(u16*)&vram[addr & 0x1FFFF] = val;
-        }
+        GPU::WriteVRAM_ARM7<u16>(addr, val);
         return;
     }
 
@@ -1301,12 +1254,7 @@ void ARM7Write32(u32 addr, u32 val)
 
     case 0x06000000:
     case 0x06800000:
-        {
-            u32 chunk = (addr >> 17) & 0x1;
-            u8* vram = GPU::VRAM_ARM7[chunk];
-            if (vram)
-                *(u32*)&vram[addr & 0x1FFFF] = val;
-        }
+        GPU::WriteVRAM_ARM7<u32>(addr, val);
         return;
     }
 
@@ -1362,7 +1310,9 @@ u16 ARM9IORead16(u32 addr)
     case 0x04000004: return GPU::DispStat[0];
     case 0x04000006: return GPU::VCount;
 
-    case 0x04000060: return 0;
+    case 0x04000060: return GPU3D::Read16(addr);
+    case 0x04000064:
+    case 0x04000066: return GPU::GPU2D_A->Read16(addr);
 
     case 0x040000B8: return DMAs[0]->Cnt & 0xFFFF;
     case 0x040000BA: return DMAs[0]->Cnt >> 16;
@@ -1410,6 +1360,12 @@ u16 ARM9IORead16(u32 addr)
     case 0x04000204: return ExMemCnt[0];
     case 0x04000208: return IME[0];
 
+    case 0x04000240: return GPU::VRAMCNT[0] | (GPU::VRAMCNT[1] << 8);
+    case 0x04000242: return GPU::VRAMCNT[2] | (GPU::VRAMCNT[3] << 8);
+    case 0x04000244: return GPU::VRAMCNT[4] | (GPU::VRAMCNT[5] << 8);
+    case 0x04000246: return GPU::VRAMCNT[6] | (WRAMCnt << 8);
+    case 0x04000248: return GPU::VRAMCNT[7] | (GPU::VRAMCNT[8] << 8);
+
     case 0x04000280: return DivCnt;
 
     case 0x040002B0: return SqrtCnt;
@@ -1441,6 +1397,9 @@ u32 ARM9IORead32(u32 addr)
     {
     case 0x04000004: return GPU::DispStat[0] | (GPU::VCount << 16);
 
+    case 0x04000060: return GPU3D::Read32(addr);
+    case 0x04000064: return GPU::GPU2D_A->Read32(addr);
+
     case 0x040000B0: return DMAs[0]->SrcAddr;
     case 0x040000B4: return DMAs[0]->DstAddr;
     case 0x040000B8: return DMAs[0]->Cnt;
@@ -1471,6 +1430,10 @@ u32 ARM9IORead32(u32 addr)
     case 0x04000210: return IE[0];
     case 0x04000214: return IF[0];
 
+    case 0x04000240: return GPU::VRAMCNT[0] | (GPU::VRAMCNT[1] << 8) | (GPU::VRAMCNT[2] << 16) | (GPU::VRAMCNT[3] << 24);
+    case 0x04000244: return GPU::VRAMCNT[4] | (GPU::VRAMCNT[5] << 8) | (GPU::VRAMCNT[6] << 16) | (WRAMCnt << 24);
+    case 0x04000248: return GPU::VRAMCNT[7] | (GPU::VRAMCNT[8] << 8);
+
     case 0x04000290: return DivNumerator[0];
     case 0x04000294: return DivNumerator[1];
     case 0x04000298: return DivDenominator[0];
@@ -1498,7 +1461,7 @@ u32 ARM9IORead32(u32 addr)
                 ret = IPCFIFO7->Read();
 
                 if (IPCFIFO7->IsEmpty() && (IPCFIFOCnt7 & 0x0004))
-                    TriggerIRQ(1, IRQ_IPCSendDone);
+                    SetIRQ(1, IRQ_IPCSendDone);
             }
             return ret;
         }
@@ -1600,7 +1563,7 @@ void ARM9IOWrite16(u32 addr, u16 val)
     {
     case 0x04000004: GPU::SetDispStat(0, val); return;
 
-    case 0x04000060: return;
+    case 0x04000060: GPU3D::Write16(addr, val); return;
 
     case 0x040000B8: DMAs[0]->WriteCnt((DMAs[0]->Cnt & 0xFFFF0000) | val); return;
     case 0x040000BA: DMAs[0]->WriteCnt((DMAs[0]->Cnt & 0x0000FFFF) | (val << 16)); return;
@@ -1627,7 +1590,7 @@ void ARM9IOWrite16(u32 addr, u16 val)
         IPCSync9 |= (val & 0x4F00);
         if ((val & 0x2000) && (IPCSync7 & 0x4000))
         {
-            TriggerIRQ(1, IRQ_IPCSync);
+            SetIRQ(1, IRQ_IPCSync);
         }
         //CompensateARM7();
         return;
@@ -1636,9 +1599,9 @@ void ARM9IOWrite16(u32 addr, u16 val)
         if (val & 0x0008)
             IPCFIFO9->Clear();
         if ((val & 0x0004) && (!(IPCFIFOCnt9 & 0x0004)) && IPCFIFO9->IsEmpty())
-            TriggerIRQ(0, IRQ_IPCSendDone);
+            SetIRQ(0, IRQ_IPCSendDone);
         if ((val & 0x0400) && (!(IPCFIFOCnt9 & 0x0400)) && (!IPCFIFO7->IsEmpty()))
-            TriggerIRQ(0, IRQ_IPCRecv);
+            SetIRQ(0, IRQ_IPCRecv);
         if (val & 0x4000)
             IPCFIFOCnt9 &= ~0x4000;
         IPCFIFOCnt9 = val & 0x8404;
@@ -1697,12 +1660,12 @@ void ARM9IOWrite16(u32 addr, u16 val)
         return;
     }
 
-    if (addr >= 0x04000000 && addr < 0x04000060)
+    if ((addr >= 0x04000000 && addr < 0x04000060) || (addr == 0x0400006C))
     {
         GPU::GPU2D_A->Write16(addr, val);
         return;
     }
-    if (addr >= 0x04001000 && addr < 0x04001060)
+    if ((addr >= 0x04001000 && addr < 0x04001060) || (addr == 0x0400106C))
     {
         GPU::GPU2D_B->Write16(addr, val);
         return;
@@ -1720,7 +1683,8 @@ void ARM9IOWrite32(u32 addr, u32 val)
 {
     switch (addr)
     {
-    case 0x04000060: return;
+    case 0x04000060: GPU3D::Write32(addr, val); return;
+    case 0x04000064: GPU::GPU2D_A->Write32(addr, val); return;
 
     case 0x040000B0: DMAs[0]->SrcAddr = val; return;
     case 0x040000B4: DMAs[0]->DstAddr = val; return;
@@ -1767,7 +1731,7 @@ void ARM9IOWrite32(u32 addr, u32 val)
                 bool wasempty = IPCFIFO9->IsEmpty();
                 IPCFIFO9->Write(val);
                 if ((IPCFIFOCnt7 & 0x0400) && wasempty)
-                    TriggerIRQ(1, IRQ_IPCRecv);
+                    SetIRQ(1, IRQ_IPCRecv);
             }
         }
         return;
@@ -1980,7 +1944,7 @@ u32 ARM7IORead32(u32 addr)
                 ret = IPCFIFO9->Read();
 
                 if (IPCFIFO9->IsEmpty() && (IPCFIFOCnt9 & 0x0004))
-                    TriggerIRQ(0, IRQ_IPCSendDone);
+                    SetIRQ(0, IRQ_IPCSendDone);
             }
             return ret;
         }
@@ -2095,7 +2059,7 @@ void ARM7IOWrite16(u32 addr, u16 val)
         IPCSync7 |= (val & 0x4F00);
         if ((val & 0x2000) && (IPCSync9 & 0x4000))
         {
-            TriggerIRQ(0, IRQ_IPCSync);
+            SetIRQ(0, IRQ_IPCSync);
         }
         return;
 
@@ -2103,9 +2067,9 @@ void ARM7IOWrite16(u32 addr, u16 val)
         if (val & 0x0008)
             IPCFIFO7->Clear();
         if ((val & 0x0004) && (!(IPCFIFOCnt7 & 0x0004)) && IPCFIFO7->IsEmpty())
-            TriggerIRQ(1, IRQ_IPCSendDone);
+            SetIRQ(1, IRQ_IPCSendDone);
         if ((val & 0x0400) && (!(IPCFIFOCnt7 & 0x0400)) && (!IPCFIFO9->IsEmpty()))
-            TriggerIRQ(1, IRQ_IPCRecv);
+            SetIRQ(1, IRQ_IPCRecv);
         if (val & 0x4000)
             IPCFIFOCnt7 &= ~0x4000;
         IPCFIFOCnt7 = val & 0x8404;
@@ -2207,7 +2171,7 @@ void ARM7IOWrite32(u32 addr, u32 val)
                 bool wasempty = IPCFIFO7->IsEmpty();
                 IPCFIFO7->Write(val);
                 if ((IPCFIFOCnt9 & 0x0400) && wasempty)
-                    TriggerIRQ(0, IRQ_IPCRecv);
+                    SetIRQ(0, IRQ_IPCRecv);
             }
         }
         return;

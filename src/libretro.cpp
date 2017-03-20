@@ -13,7 +13,11 @@
 #include "GPU.h"
 #include "libretro.h"
 
-static uint16_t *frame_buf;
+#define VIDEO_WIDTH 256
+#define VIDEO_HEIGHT 384
+#define VIDEO_PIXELS VIDEO_WIDTH * VIDEO_HEIGHT
+
+static uint8_t *frame_buf;
 static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
 static bool use_audio_cb;
@@ -36,7 +40,7 @@ static retro_environment_t environ_cb;
 
 void retro_init(void)
 {
-   frame_buf = (uint16_t*)malloc(256 * 384 * sizeof(uint16_t));
+   frame_buf = (uint8_t*)malloc(VIDEO_PIXELS * sizeof(uint32_t));
    const char *dir = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
    {
@@ -80,10 +84,11 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    float aspect                = 0.0f;
    float sampling_rate         = 30000.0f;
 
-   info->geometry.base_width   = 256;
-   info->geometry.base_height  = 386;
-   info->geometry.max_width    = 256;
-   info->geometry.max_height   = 384;
+
+   info->geometry.base_width   = VIDEO_WIDTH;
+   info->geometry.base_height  = VIDEO_HEIGHT;
+   info->geometry.max_width    = VIDEO_WIDTH;
+   info->geometry.max_height   = VIDEO_HEIGHT;
    info->geometry.aspect_ratio = aspect;
 
    last_aspect                 = aspect;
@@ -152,92 +157,33 @@ void retro_reset(void)
 
 static void update_input(void)
 {
-   int dir_x = 0;
-   int dir_y = 0;
+   uint16_t keys = 0;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A)) << 0;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B)) << 1;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT)) << 2;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START)) << 3;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT)) << 4;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT)) << 5;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP)) << 6;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN)) << 7;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R)) << 8;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L)) << 9;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X)) << 10;
+   keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y)) << 11;
 
-   input_poll_cb();
-   if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP))
-      dir_y--;
-   if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN))
-      dir_y++;
-   if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT))
-      dir_x--;
-   if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT))
-      dir_x++;
+   for (uint8_t i = 0; i < 12; i++) {
+      bool key = !!((keys >> i) & 1);
+      uint8_t nds_key = i > 9 ? i + 6 : i;
 
-   if (input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, RETROK_RETURN))
-      log_cb(RETRO_LOG_INFO, "Return key is pressed!\n");
-
-   if (input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, RETROK_x))
-      log_cb(RETRO_LOG_INFO, "x key is pressed!\n");
-
-   int16_t mouse_x = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
-   int16_t mouse_y = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
-   bool mouse_l    = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
-   bool mouse_r    = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT);
-   bool mouse_down = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_WHEELDOWN);
-   bool mouse_up   = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_WHEELUP);
-   bool mouse_middle = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_MIDDLE);
-   if (mouse_x)
-      log_cb(RETRO_LOG_INFO, "Mouse X: %d\n", mouse_x);
-   if (mouse_y)
-      log_cb(RETRO_LOG_INFO, "Mouse Y: %d\n", mouse_y);
-   if (mouse_l)
-      log_cb(RETRO_LOG_INFO, "Mouse L pressed.\n");
-   if (mouse_r)
-      log_cb(RETRO_LOG_INFO, "Mouse R pressed.\n");
-   if (mouse_down)
-      log_cb(RETRO_LOG_INFO, "Mouse wheeldown pressed.\n");
-   if (mouse_up)
-      log_cb(RETRO_LOG_INFO, "Mouse wheelup pressed.\n");
-   if (mouse_middle)
-      log_cb(RETRO_LOG_INFO, "Mouse middle pressed.\n");
-
-   mouse_rel_x += mouse_x;
-   mouse_rel_y += mouse_y;
-   if (mouse_rel_x >= 310)
-      mouse_rel_x = 309;
-   else if (mouse_rel_x < 10)
-      mouse_rel_x = 10;
-   if (mouse_rel_y >= 230)
-      mouse_rel_y = 229;
-   else if (mouse_rel_y < 10)
-      mouse_rel_y = 10;
-
-   bool pointer_pressed = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED);
-   int16_t pointer_x = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
-   int16_t pointer_y = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
-   if (pointer_pressed)
-      log_cb(RETRO_LOG_INFO, "Pointer: (%6d, %6d).\n", pointer_x, pointer_y);
-
-   dir_x += input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / 5000;
-   dir_y += input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 5000;
-   dir_x += input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / 5000;
-   dir_y += input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / 5000;
-
-   x_coord = (x_coord + dir_x) & 31;
-   y_coord = (y_coord + dir_y) & 31;
-
-   if (rumble.set_rumble_state)
-   {
-      static bool old_start;
-      static bool old_select;
-      uint16_t strength_strong = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2) ? 0x4000 : 0xffff;
-      uint16_t strength_weak = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) ? 0x4000 : 0xffff;
-      bool start = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START);
-      bool select = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT);
-      if (old_start != start)
-         log_cb(RETRO_LOG_INFO, "Strong rumble: %s.\n", start ? "ON": "OFF");
-      rumble.set_rumble_state(0, RETRO_RUMBLE_STRONG, start * strength_strong);
-
-      if (old_select != select)
-         log_cb(RETRO_LOG_INFO, "Weak rumble: %s.\n", select ? "ON": "OFF");
-      rumble.set_rumble_state(0, RETRO_RUMBLE_WEAK, select * strength_weak);
-
-      old_start = start;
-      old_select = select;
+      
+      if (key) {
+         NDS::PressKey(nds_key);
+      } else {
+         NDS::ReleaseKey(nds_key);
+      }
    }
 }
+
 
 static void check_variables(void)
 {
@@ -262,16 +208,19 @@ static void audio_set_state(bool enable)
 
 void retro_run(void)
 {
+   unsigned i;
    update_input();
    NDS::RunFrame();
-   memcpy(frame_buf, GPU::Framebuffer, sizeof(GPU::Framebuffer));
-   for (int i = 0; i < 256*192*2; i++)
+   for (i = 0; i < VIDEO_PIXELS * sizeof(uint32_t); i += sizeof(uint32_t))
    {
-       frame_buf[i]  = ((frame_buf[i] & 0x1F) << 11) | 
-                       ((frame_buf[i] & 0x3E0) << 1) | 
-                       ((frame_buf[i] & 0x7C00) >> 10);
+      uint8_t *pixel = (uint8_t*)GPU::Framebuffer + i;
+      /* swap red and blue */
+      frame_buf[i + 0] = pixel[2];
+      frame_buf[i + 1] = pixel[1];
+      frame_buf[i + 2] = pixel[0];
+      frame_buf[i + 3] = pixel[3];
    }
-   video_cb(frame_buf, 256, 384, 0);
+   video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, 0);
    if (!use_audio_cb)
       audio_callback();
 
@@ -292,7 +241,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
    environ_cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, desc);
 
-   enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
+   enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
    if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
    {
       log_cb(RETRO_LOG_INFO, "XRGB8888 is not supported.\n");
@@ -301,6 +250,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
    snprintf(retro_game_path, sizeof(retro_game_path), "%s", info->path);
    NDS::Init();
+   NDS::LoadROM(info->path, true);
 
    struct retro_audio_callback audio_cb = { audio_callback, audio_set_state };
    use_audio_cb = environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK, &audio_cb);
