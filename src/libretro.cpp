@@ -11,6 +11,7 @@
 #endif
 #include "NDS.h"
 #include "GPU.h"
+#include "SPU.h"
 #include "libretro.h"
 
 #define VIDEO_WIDTH 256
@@ -77,8 +78,8 @@ static retro_input_state_t input_state_cb;
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-   info->timing.fps            = 60.0f;
-   info->timing.sample_rate    = 30000.0f;
+   info->timing.fps            = 60.0f / 1.001f;
+   info->timing.sample_rate    = 32.0f * 1024.0f;
    info->geometry.base_width   = VIDEO_WIDTH;
    info->geometry.base_height  = VIDEO_HEIGHT;
    info->geometry.max_width    = VIDEO_WIDTH;
@@ -182,17 +183,13 @@ static void check_variables(void)
 
 static void audio_callback(void)
 {
-   static int16_t buffer[2 * 30000 / 60];
-   int16_t* ptr = buffer;
-   for (unsigned i = 0; i < 30000 / 60; i++, phase++)
-   {
-      int16_t val = 0x800 * sinf(2.0f * M_PI * phase * 300.0f / 30000.0f);
-      *(ptr++) = val;
-      *(ptr++) = val;
-   }
-   audio_cb(buffer, 30000 / 60);
+   static int16_t buffer[0x1000];
+   u32 avail = SPU::Available();
+   if(avail > sizeof(buffer) / (2 * sizeof(int16_t)))
+      avail = sizeof(buffer) / (2 * sizeof(int16_t));
 
-   phase %= 100;
+   SPU::ReadOutput(buffer, avail);
+   audio_cb(buffer, avail);
 }
 
 void retro_run(void)
@@ -209,7 +206,7 @@ void retro_run(void)
       frame_buf[i + 2] = pixel[0];
       frame_buf[i + 3] = pixel[3];
    }
-   video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, 0);
+   video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_WIDTH * sizeof(uint32_t));
    audio_callback();
 
    bool updated = false;

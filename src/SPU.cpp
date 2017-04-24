@@ -583,6 +583,10 @@ void ReadOutput(s16* data, int samples)
     }
 }
 
+u32 Available(void)
+{
+   return ((OutputWriteOffset - OutputReadOffset) & ((2*OutputBufferSize)-1)) >> 1;
+}
 
 u8 Read8(u32 addr)
 {
