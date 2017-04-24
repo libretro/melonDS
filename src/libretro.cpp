@@ -78,7 +78,7 @@ static retro_input_state_t input_state_cb;
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-   info->timing.fps            = 60.0f / 1.001f;
+   info->timing.fps            = 32.0f * 1024.0f * 1024.0f / 560190.0f;
    info->timing.sample_rate    = 32.0f * 1024.0f;
    info->geometry.base_width   = VIDEO_WIDTH;
    info->geometry.base_height  = VIDEO_HEIGHT;
