@@ -20,9 +20,6 @@
 static uint8_t *frame_buf;
 static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
-static bool use_audio_cb;
-static float last_aspect;
-static float last_sample_rate;
 char retro_base_directory[4096];
 char retro_game_path[4096];
 
@@ -74,25 +71,19 @@ void retro_get_system_info(struct retro_system_info *info)
 }
 
 static retro_video_refresh_t video_cb;
-static retro_audio_sample_t audio_cb;
-static retro_audio_sample_batch_t audio_batch_cb;
+static retro_audio_sample_batch_t audio_cb;
 static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-   float aspect                = 0.0f;
-   float sampling_rate         = 30000.0f;
-
-
+   info->timing.fps            = 60.0f;
+   info->timing.sample_rate    = 30000.0f;
    info->geometry.base_width   = VIDEO_WIDTH;
    info->geometry.base_height  = VIDEO_HEIGHT;
    info->geometry.max_width    = VIDEO_WIDTH;
    info->geometry.max_height   = VIDEO_HEIGHT;
-   info->geometry.aspect_ratio = aspect;
-
-   last_aspect                 = aspect;
-   last_sample_rate            = sampling_rate;
+   info->geometry.aspect_ratio = 0.0f;
 }
 
 static struct retro_rumble_interface rumble;
@@ -120,12 +111,11 @@ void retro_set_environment(retro_environment_t cb)
 
 void retro_set_audio_sample(retro_audio_sample_t cb)
 {
-   audio_cb = cb;
 }
 
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb)
 {
-   audio_batch_cb = cb;
+   audio_cb = cb;
 }
 
 void retro_set_input_poll(retro_input_poll_t cb)
@@ -192,18 +182,17 @@ static void check_variables(void)
 
 static void audio_callback(void)
 {
+   static int16_t buffer[2 * 30000 / 60];
+   int16_t* ptr = buffer;
    for (unsigned i = 0; i < 30000 / 60; i++, phase++)
    {
       int16_t val = 0x800 * sinf(2.0f * M_PI * phase * 300.0f / 30000.0f);
-      audio_cb(val, val);
+      *(ptr++) = val;
+      *(ptr++) = val;
    }
+   audio_cb(buffer, 30000 / 60);
 
    phase %= 100;
-}
-
-static void audio_set_state(bool enable)
-{
-   (void)enable;
 }
 
 void retro_run(void)
@@ -221,8 +210,7 @@ void retro_run(void)
       frame_buf[i + 3] = pixel[3];
    }
    video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, 0);
-   if (!use_audio_cb)
-      audio_callback();
+   audio_callback();
 
    bool updated = false;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
@@ -251,9 +239,6 @@ bool retro_load_game(const struct retro_game_info *info)
    snprintf(retro_game_path, sizeof(retro_game_path), "%s", info->path);
    NDS::Init();
    NDS::LoadROM(info->path, true);
-
-   struct retro_audio_callback audio_cb = { audio_callback, audio_set_state };
-   use_audio_cb = environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK, &audio_cb);
 
    check_variables();
 
