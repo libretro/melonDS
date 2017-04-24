@@ -16,58 +16,25 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
-#ifndef DMA_H
-#define DMA_H
+#ifndef CONFIG_H
+#define CONFIG_H
 
 #include "types.h"
 
-class DMA
+namespace Config
 {
-public:
-    DMA(u32 cpu, u32 num);
-    ~DMA();
 
-    void Reset();
+void Load();
+void Save();
 
-    void WriteCnt(u32 val);
-    void Start();
+extern int KeyMapping[12];
+extern int JoyMapping[12];
 
-    s32 Run(s32 cycles);
+extern int WindowWidth;
+extern int WindowHeight;
 
-    void StartIfNeeded(u32 mode)
-    {
-        if ((mode == StartMode) && (Cnt & 0x80000000))
-            Start();
-    }
+extern int DirectBoot;
 
-    void StopIfNeeded(u32 mode)
-    {
-        if (mode == StartMode)
-            Cnt &= ~0x80000000;
-    }
+}
 
-    u32 SrcAddr;
-    u32 DstAddr;
-    u32 Cnt;
-
-private:
-    u32 CPU, Num;
-
-    s32 Waitstates[2][16];
-
-    u32 StartMode;
-    u32 CurSrcAddr;
-    u32 CurDstAddr;
-    u32 RemCount;
-    u32 IterCount;
-    u32 SrcAddrInc;
-    u32 DstAddrInc;
-    u32 CountMask;
-
-    bool Running;
-    bool InProgress;
-
-    bool IsGXFIFODMA;
-};
-
-#endif
+#endif // CONFIG_H

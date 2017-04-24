@@ -33,7 +33,7 @@ typedef struct
     // final vertex attributes.
     // allows them to be reused in polygon strips.
 
-    s32 FinalPosition[4];
+    s32 FinalPosition[2];
     s32 FinalColor[3];
 
 } Vertex;
@@ -43,12 +43,20 @@ typedef struct
     Vertex* Vertices[10];
     u32 NumVertices;
 
+    s32 FinalZ[10];
+    s32 FinalW[10];
+    u8 WShift;
+
     u32 Attr;
     u32 TexParam;
     u32 TexPalette;
 
     bool FacingView;
     bool Translucent;
+
+    bool IsShadowMask;
+    bool IsShadow;
+    bool ClearStencil;
 
     u32 VTop, VBottom; // vertex indices
     s32 YTop, YBottom; // Y coords
@@ -59,7 +67,9 @@ typedef struct
 extern u32 DispCnt;
 extern u32 AlphaRef;
 extern s32 Viewport[4];
-extern u32 ClearAttr1, ClearAttr2;
+extern u32 RenderClearAttr1, RenderClearAttr2;
+
+extern u16 ToonTable[32];
 
 bool Init();
 void DeInit();
@@ -72,7 +82,10 @@ void CheckFIFOIRQ();
 void CheckFIFODMA();
 
 void VBlank();
+void VCount215();
 u32* GetLine(int line);
+
+void WriteToGXFIFO(u32 val);
 
 u8 Read8(u32 addr);
 u16 Read16(u32 addr);

@@ -34,6 +34,9 @@ enum
     ID_RUN,
     ID_PAUSE,
     ID_RESET,
+
+    ID_EMUCONFIG,
+    ID_INPUTCONFIG,
 };
 
 class EmuThread;
@@ -42,6 +45,9 @@ class wxApp_melonDS : public wxApp
 {
 public:
     virtual bool OnInit();
+    virtual int OnExit();
+
+    EmuThread* emuthread;
 };
 
 class MainFrame : public wxFrame
@@ -49,36 +55,68 @@ class MainFrame : public wxFrame
 public:
     MainFrame();
 
-    SDL_Window* sdlwin;
-    SDL_Renderer* sdlrend;
-    SDL_Texture* sdltex;
+    SDL_Joystick* joy;
+    SDL_JoystickID joyid;
+
+    EmuThread* emuthread;
+
+    wxString rompath;
 
 private:
     wxDECLARE_EVENT_TABLE();
 
+    void OnClose(wxCloseEvent& event);
+    void OnCloseFromMenu(wxCommandEvent& event);
     void OnOpenROM(wxCommandEvent& event);
 
-    void OnPaint(wxPaintEvent& event);
+    void OnRun(wxCommandEvent& event);
+    void OnPause(wxCommandEvent& event);
+    void OnReset(wxCommandEvent& event);
 
-    EmuThread* emuthread;
-    wxMutex* emumutex;
-    wxCondition* emucond;
+    void OnEmuConfig(wxCommandEvent& event);
+    void OnInputConfig(wxCommandEvent& event);
+
+    void ProcessSDLEvents();
 };
 
 class EmuThread : public wxThread
 {
 public:
-    EmuThread(MainFrame* parent, wxMutex* mutex, wxCondition* cond);
+    EmuThread();
     ~EmuThread();
 
-    u32 EmuStatus;
+    void EmuRun() { emustatus = 1; emupaused = false; SDL_RaiseWindow(sdlwin); }
+    void EmuPause() { emustatus = 2; while (!emupaused); }
+    void EmuExit() { emustatus = 0; }
+
+    bool EmuIsRunning() { return (emustatus == 1) || (emustatus == 2); }
+    bool EmuIsPaused() { return (emustatus == 2) && emupaused; }
+
+    MainFrame* parent;
 
 protected:
     virtual ExitCode Entry();
+    void ProcessEvents();
 
-    MainFrame* parent;
-    wxMutex* mutex;
-    wxCondition* cond;
+    SDL_Window* sdlwin;
+    SDL_Renderer* sdlrend;
+    SDL_Texture* sdltex;
+
+    SDL_Rect topsrc, topdst;
+    SDL_Rect botsrc, botdst;
+
+    SDL_AudioDeviceID audio;
+
+    bool Touching;
+    int txoffset, tyoffset;
+
+    void* texpixels;
+    int texstride;
+
+    u32 axismask;
+
+    int emustatus;
+    volatile bool emupaused;
 };
 
 #endif // WX_MAIN_H

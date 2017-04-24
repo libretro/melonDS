@@ -16,12 +16,28 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
-#ifndef VERSION_H
-#define VERSION_H
+#ifndef WX_EMUCONFIG_H
+#define WX_EMUCONFIG_H
 
-#define MELONDS_VERSION    "0.2"
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
 
-#define MELONDS_URL        "http://melonds.kuribo64.net/"
+class EmuConfigDialog : public wxDialog
+{
+public:
+    EmuConfigDialog(wxWindow* parent);
+    ~EmuConfigDialog();
 
-#endif // VERSION_H
+private:
+    wxDECLARE_EVENT_TABLE();
+
+    void OnOk(wxCommandEvent& event);
+    void OnCancel(wxCommandEvent& event);
+
+    wxCheckBox* cbDirectBoot;
+};
+
+#endif // WX_EMUCONFIG_H
 

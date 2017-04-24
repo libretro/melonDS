@@ -20,13 +20,12 @@
 #include "NDS.h"
 #include "DMA.h"
 #include "NDSCart.h"
-#include "GPU3D.h"
+#include "GPU.h"
 
 
 // NOTES ON DMA SHIT
 //
 // * could use optimized code paths for common types of DMA transfers. for example, VRAM
-// * needs to eventually be made more accurate anyway. DMA isn't instant.
 
 
 DMA::DMA(u32 cpu, u32 num)
@@ -116,6 +115,7 @@ void DMA::Reset()
     DstAddrInc = 0;
 
     Running = false;
+    InProgress = false;
 }
 
 void DMA::WriteCnt(u32 val)
@@ -154,8 +154,8 @@ void DMA::WriteCnt(u32 val)
         else if (StartMode == 0x07)
             GPU3D::CheckFIFODMA();
 
-        if ((StartMode&7)!=0x00 && (StartMode&7)!=0x1 && StartMode!=2 && StartMode!=0x05 && StartMode!=0x12 && StartMode!=0x07)
-            printf("UNIMPLEMENTED ARM%d DMA%d START MODE %02X\n", CPU?7:9, Num, StartMode);
+        if (StartMode==0x06 || StartMode==0x13)
+            printf("UNIMPLEMENTED ARM%d DMA%d START MODE %02X, %08X->%08X\n", CPU?7:9, Num, StartMode, SrcAddr, DstAddr);
     }
 }
 
@@ -163,15 +163,18 @@ void DMA::Start()
 {
     if (Running) return;
 
-    u32 countmask;
-    if (CPU == 0)
-        countmask = 0x001FFFFF;
-    else
-        countmask = (Num==3 ? 0x0000FFFF : 0x00003FFF);
+    if (!InProgress)
+    {
+        u32 countmask;
+        if (CPU == 0)
+            countmask = 0x001FFFFF;
+        else
+            countmask = (Num==3 ? 0x0000FFFF : 0x00003FFF);
 
-    RemCount = Cnt & countmask;
-    if (!RemCount)
-        RemCount = countmask+1;
+        RemCount = Cnt & countmask;
+        if (!RemCount)
+            RemCount = countmask+1;
+    }
 
     if (StartMode == 0x07 && RemCount > 112)
         IterCount = 112;
@@ -183,21 +186,26 @@ void DMA::Start()
 
     //printf("ARM%d DMA%d %08X %02X %08X->%08X %d bytes %dbit\n", CPU?7:9, Num, Cnt, StartMode, CurSrcAddr, CurDstAddr, RemCount*((Cnt&0x04000000)?4:2), (Cnt&0x04000000)?32:16);
 
-    // special path for cart DMA. this is a gross hack.
-    // emulating it properly requires emulating cart transfer delays, so uh... TODO
-    if (CurSrcAddr==0x04100010 && RemCount==1 && (Cnt & 0x07E00000)==0x07000000 &&
-        StartMode==0x05 || StartMode==0x12)
+    // special path for the display FIFO. another gross hack.
+    // the display FIFO seems to be more like a circular buffer that holds 16 pixels
+    // from which the display controller reads. DMA is triggered every 8 pixels to fill it
+    // as it is being read from. emulating it properly would be resource intensive.
+    // proper emulation would only matter if something is trying to feed the FIFO manually
+    // instead of using the DMA. which is probably never happening. the only thing I know of
+    // that even uses the display FIFO is the aging cart.
+    if (StartMode == 0x04)
     {
-        NDSCart::DMA(CurDstAddr);
-        Cnt &= ~0x80000000;
-        if (Cnt & 0x40000000)
-            NDS::SetIRQ(CPU, NDS::IRQ_DMA0 + Num);
+        GPU::GPU2D_A->FIFODMA(CurSrcAddr);
+        CurSrcAddr += 256*2;
         return;
     }
+
+    IsGXFIFODMA = (CPU == 0 && (CurSrcAddr>>24) == 0x02 && CurDstAddr == 0x04000400 && DstAddrInc == 0);
 
     // TODO eventually: not stop if we're running code in ITCM
 
     Running = true;
+    InProgress = true;
     NDS::StopCPU(CPU, 1<<Num);
 }
 
@@ -215,7 +223,10 @@ s32 DMA::Run(s32 cycles)
         {
             writefn(CurDstAddr, readfn(CurSrcAddr));
 
-            cycles -= (Waitstates[0][(CurSrcAddr >> 24) & 0xF] + Waitstates[0][(CurDstAddr >> 24) & 0xF]);
+            s32 c = (Waitstates[0][(CurSrcAddr >> 24) & 0xF] + Waitstates[0][(CurDstAddr >> 24) & 0xF]);
+            cycles -= c;
+            NDS::RunTimingCriticalDevices(CPU, c);
+
             CurSrcAddr += SrcAddrInc<<1;
             CurDstAddr += DstAddrInc<<1;
             IterCount--;
@@ -224,6 +235,23 @@ s32 DMA::Run(s32 cycles)
     }
     else
     {
+        // optimized path for typical GXFIFO DMA
+        if (IsGXFIFODMA)
+        {
+            while (IterCount > 0 && cycles > 0)
+            {
+                GPU3D::WriteToGXFIFO(*(u32*)&NDS::MainRAM[CurSrcAddr&0x3FFFFF]);
+
+                s32 c = (Waitstates[1][0x2] + Waitstates[1][0x4]);
+                cycles -= c;
+                NDS::RunTimingCriticalDevices(0, c);
+
+                CurSrcAddr += SrcAddrInc<<2;
+                IterCount--;
+                RemCount--;
+            }
+        }
+
         u32 (*readfn)(u32) = CPU ? NDS::ARM7Read32 : NDS::ARM9Read32;
         void (*writefn)(u32,u32) = CPU ? NDS::ARM7Write32 : NDS::ARM9Write32;
 
@@ -231,7 +259,10 @@ s32 DMA::Run(s32 cycles)
         {
             writefn(CurDstAddr, readfn(CurSrcAddr));
 
-            cycles -= (Waitstates[1][(CurSrcAddr >> 24) & 0xF] + Waitstates[1][(CurDstAddr >> 24) & 0xF]);
+            s32 c = (Waitstates[1][(CurSrcAddr >> 24) & 0xF] + Waitstates[1][(CurDstAddr >> 24) & 0xF]);
+            cycles -= c;
+            NDS::RunTimingCriticalDevices(CPU, c);
+
             CurSrcAddr += SrcAddrInc<<2;
             CurDstAddr += DstAddrInc<<2;
             IterCount--;
@@ -241,9 +272,6 @@ s32 DMA::Run(s32 cycles)
 
     if (RemCount)
     {
-        Cnt &= ~CountMask;
-        Cnt |= RemCount;
-
         if (IterCount == 0)
         {
             Running = false;
@@ -263,6 +291,7 @@ s32 DMA::Run(s32 cycles)
         NDS::SetIRQ(CPU, NDS::IRQ_DMA0 + Num);
 
     Running = false;
+    InProgress = false;
     NDS::ResumeCPU(CPU, 1<<Num);
 
     return cycles - 2;

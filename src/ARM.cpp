@@ -20,7 +20,6 @@
 #include "NDS.h"
 #include "ARM.h"
 #include "ARMInterpreter.h"
-#include "GPU3D.h"
 
 
 u32 ARM::ConditionTable[16] =
@@ -172,6 +171,13 @@ void ARM::JumpTo(u32 addr, bool restorecpsr)
         else                addr &= ~0x1;
     }
 
+    // aging cart debug crap
+    //if (addr == 0x0201764C) printf("capture test %d: R1=%08X\n", R[6], R[1]);
+    //if (addr == 0x020175D8) printf("capture test %d: res=%08X\n", R[6], R[0]);
+    //if (addr == 0x37FF234 && R[15]!=0x37FF23C) printf("poké infinite loop %08X, %08X\n", R[15], DataRead32(0x380FFC8));
+    // 37FD4BC. if R0=0, inf. loop
+    // 38098AC -> R0
+
     if (addr & 0x1)
     {
         addr &= ~0x1;
@@ -319,29 +325,32 @@ s32 ARM::Execute()
 {
     if (Halted)
     {
-        if (NDS::HaltInterrupted(Num))
+        if (Halted == 2)
         {
             Halted = 0;
-            if (NDS::IME[Num]&1)
+        }
+        else if (NDS::HaltInterrupted(Num))
+        {
+            Halted = 0;
+            if (NDS::IME[Num] & 0x1)
                 TriggerIRQ();
         }
         else
         {
             Cycles = CyclesToRun;
-            GPU3D::Run(CyclesToRun >> 1);
+
+            if (Num == 0) NDS::RunTimingCriticalDevices(0, CyclesToRun >> 1);
+            else          NDS::RunTimingCriticalDevices(1, CyclesToRun);
+
             return Cycles;
         }
     }
 
     Cycles = 0;
     s32 lastcycles = 0;
-    u32 addr = R[15] - (CPSR&0x20 ? 4:8);
-    u32 cpsr = CPSR;
 
     while (Cycles < CyclesToRun)
     {
-        //if(Num==1)printf("%08X %08X\n",  R[15] - (CPSR&0x20 ? 4:8), NextInstr);
-
         if (CPSR & 0x20) // THUMB
         {
             // prefetch
@@ -374,16 +383,17 @@ s32 ARM::Execute()
             }
         }
 
-        //if (R[15]==0x037F9364) printf("R8=%08X R9=%08X\n", R[8], R[9]);
-
-        // gross hack
-        // TODO, though: move timer code here too?
-        // quick testing shows that moving this to the NDS loop doesn't really slow things down
         if (Num==0)
         {
             s32 diff = Cycles - lastcycles;
-            GPU3D::Run(diff >> 1);
+            NDS::RunTimingCriticalDevices(0, diff >> 1);
             lastcycles = Cycles - (diff&1);
+        }
+        else
+        {
+            s32 diff = Cycles - lastcycles;
+            NDS::RunTimingCriticalDevices(1, diff);
+            lastcycles = Cycles;
         }
 
         // TODO optimize this shit!!!
@@ -393,15 +403,11 @@ s32 ARM::Execute()
                 Cycles = CyclesToRun;
             break;
         }
-        if (NDS::HaltInterrupted(Num))
+        if (NDS::IF[Num] & NDS::IE[Num])
         {
-            if (NDS::IME[Num]&1)
+            if (NDS::IME[Num] & 0x1)
                 TriggerIRQ();
         }
-
-        // temp. debug cruft
-        addr = R[15] - (CPSR&0x20 ? 4:8);
-        cpsr = CPSR;
     }
 
     if (Halted == 2)

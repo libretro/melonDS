@@ -49,9 +49,18 @@
 //
 // formula for clear depth: (GBAtek is wrong there)
 // clearZ = (val * 0x200) + 0x1FF;
-// if (clearZ >= 0x010000 && clearZ < 0xFFFFFF) clearZ++;
 //
 // alpha is 5-bit
+//
+// matrix push/pop on the position matrix are always applied to the vector matrix too, even in position-only mode
+// store/restore too, probably (TODO: confirm)
+// (the idea is that each position matrix has an associated vector matrix)
+//
+// TODO: check if translate works on the vector matrix? seems pointless
+//
+// viewport Y coordinates are upside-down
+//
+// clear color/depth/bitmap/etc registers (04000350/04000354) are double-buffered
 
 
 namespace GPU3D
@@ -159,6 +168,9 @@ u32 ExecParams[32];
 u32 ExecParamCount;
 s32 CycleCount;
 
+u32 NumPushPopCommands;
+u32 NumTestCommands;
+
 
 u32 MatrixMode;
 
@@ -207,6 +219,9 @@ u32 CurPolygonAttr;
 u32 TexParam;
 u32 TexPalette;
 
+s32 PosTestResult[4];
+s16 VecTestResult[3];
+
 Vertex TempVertexBuffer[4];
 u32 VertexNum;
 u32 VertexNumInPoly;
@@ -221,7 +236,12 @@ Polygon* CurPolygonRAM;
 u32 NumVertices, NumPolygons;
 u32 CurRAMBank;
 
+Vertex* RenderVertexRAM;
+Polygon* RenderPolygonRAM;
+u32 RenderNumPolygons;
+
 u32 ClearAttr1, ClearAttr2;
+u32 RenderClearAttr1, RenderClearAttr2;
 
 u32 FlushRequest;
 u32 FlushAttributes;
@@ -256,6 +276,9 @@ void Reset()
     ParamCount = 0;
     TotalParams = 0;
 
+    NumPushPopCommands = 0;
+    NumTestCommands = 0;
+
     DispCnt = 0;
     AlphaRef = 0;
 
@@ -285,6 +308,9 @@ void Reset()
     ProjMatrixStackPointer = 0;
     PosMatrixStackPointer = 0;
     TexMatrixStackPointer = 0;
+
+    memset(PosTestResult, 0, 4*4);
+    memset(VecTestResult, 0, 2*3);
 
     VertexNum = 0;
     VertexNumInPoly = 0;
@@ -439,44 +465,148 @@ void UpdateClipMatrix()
 
 
 
-template<int comp, s32 plane>
+template<int comp, s32 plane, bool attribs>
 void ClipSegment(Vertex* outbuf, Vertex* vout, Vertex* vin)
 {
     s64 factor_num = vin->Position[3] - (plane*vin->Position[comp]);
     s32 factor_den = factor_num - (vout->Position[3] - (plane*vout->Position[comp]));
 
-    Vertex mid;
-#define INTERPOLATE(var)  { mid.var = (vin->var + ((vout->var - vin->var) * factor_num) / factor_den); }
+#define INTERPOLATE(var)  { outbuf->var = (vin->var + ((vout->var - vin->var) * factor_num) / factor_den); }
 
     if (comp != 0) INTERPOLATE(Position[0]);
     if (comp != 1) INTERPOLATE(Position[1]);
     if (comp != 2) INTERPOLATE(Position[2]);
     INTERPOLATE(Position[3]);
-    mid.Position[comp] = plane*mid.Position[3];
+    outbuf->Position[comp] = plane*outbuf->Position[3];
 
-    INTERPOLATE(Color[0]);
-    INTERPOLATE(Color[1]);
-    INTERPOLATE(Color[2]);
+    if (attribs)
+    {
+        INTERPOLATE(Color[0]);
+        INTERPOLATE(Color[1]);
+        INTERPOLATE(Color[2]);
 
-    INTERPOLATE(TexCoords[0]);
-    INTERPOLATE(TexCoords[1]);
+        INTERPOLATE(TexCoords[0]);
+        INTERPOLATE(TexCoords[1]);
+    }
 
-    mid.Clipped = true;
+    outbuf->Clipped = true;
 
 #undef INTERPOLATE
-    *outbuf = mid;
+}
+
+template<int comp, bool attribs>
+int ClipAgainstPlane(Vertex* vertices, int nverts, int clipstart)
+{
+    Vertex temp[10];
+    int prev, next;
+    int c = clipstart;
+
+    if (clipstart == 2)
+    {
+        temp[0] = vertices[0];
+        temp[1] = vertices[1];
+    }
+
+    for (int i = clipstart; i < nverts; i++)
+    {
+        prev = i-1; if (prev < 0) prev = nverts-1;
+        next = i+1; if (next >= nverts) next = 0;
+
+        Vertex vtx = vertices[i];
+        if (vtx.Position[comp] > vtx.Position[3])
+        {
+            if ((comp == 2) && (!(CurPolygonAttr & (1<<12)))) return 0;
+
+            Vertex* vprev = &vertices[prev];
+            if (vprev->Position[comp] <= vprev->Position[3])
+            {
+                ClipSegment<comp, 1, attribs>(&temp[c], &vtx, vprev);
+                c++;
+            }
+
+            Vertex* vnext = &vertices[next];
+            if (vnext->Position[comp] <= vnext->Position[3])
+            {
+                ClipSegment<comp, 1, attribs>(&temp[c], &vtx, vnext);
+                c++;
+            }
+        }
+        else
+            temp[c++] = vtx;
+    }
+
+    nverts = c; c = clipstart;
+    for (int i = clipstart; i < nverts; i++)
+    {
+        prev = i-1; if (prev < 0) prev = nverts-1;
+        next = i+1; if (next >= nverts) next = 0;
+
+        Vertex vtx = temp[i];
+        if (vtx.Position[comp] < -vtx.Position[3])
+        {
+            Vertex* vprev = &temp[prev];
+            if (vprev->Position[comp] >= -vprev->Position[3])
+            {
+                ClipSegment<comp, -1, attribs>(&vertices[c], &vtx, vprev);
+                c++;
+            }
+
+            Vertex* vnext = &temp[next];
+            if (vnext->Position[comp] >= -vnext->Position[3])
+            {
+                ClipSegment<comp, -1, attribs>(&vertices[c], &vtx, vnext);
+                c++;
+            }
+        }
+        else
+            vertices[c++] = vtx;
+    }
+
+    // checkme
+    for (int i = 0; i < c; i++)
+    {
+        Vertex* vtx = &vertices[i];
+
+        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
+        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
+        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
+    }
+
+    return c;
+}
+
+template<bool attribs>
+int ClipPolygon(Vertex* vertices, int nverts, int clipstart)
+{
+    // clip.
+    // for each vertex:
+    // if it's outside, check if the previous and next vertices are inside
+    // if so, place a new vertex at the edge of the view volume
+
+    // TODO: check for 1-dot polygons
+    // TODO: the hardware seems to use a different algorithm. it reacts differently to vertices with W=0
+
+    // X clipping
+    nverts = ClipAgainstPlane<0, attribs>(vertices, nverts, clipstart);
+
+    // Y clipping
+    nverts = ClipAgainstPlane<1, attribs>(vertices, nverts, clipstart);
+
+    // Z clipping
+    nverts = ClipAgainstPlane<2, attribs>(vertices, nverts, clipstart);
+
+    return nverts;
 }
 
 void SubmitPolygon()
 {
-    Vertex clippedvertices[2][10];
+    Vertex clippedvertices[10];
     Vertex* reusedvertices[2];
     int clipstart = 0;
     int lastpolyverts = 0;
 
     int nverts = PolygonMode & 0x1 ? 4:3;
     int prev, next;
-    int c;
 
     // culling
 
@@ -490,7 +620,7 @@ void SubmitPolygon()
     normalX = (((s64)v0->Position[1] * v2->Position[3]) - ((s64)v0->Position[3] * v2->Position[1])) >> 12;
     normalY = (((s64)v0->Position[3] * v2->Position[0]) - ((s64)v0->Position[0] * v2->Position[3])) >> 12;
     normalZ = (((s64)v0->Position[0] * v2->Position[1]) - ((s64)v0->Position[1] * v2->Position[0])) >> 12;
-    dot = ((s64)(v1->Position[0] >> 0) * normalX) + ((s64)(v1->Position[1] >> 0) * normalY) + ((s64)(v1->Position[3] >> 0) * normalZ);
+    dot = ((s64)v1->Position[0] * normalX) + ((s64)v1->Position[1] * normalY) + ((s64)v1->Position[3] * normalZ);
 
     bool facingview = (dot < 0);
 
@@ -548,222 +678,21 @@ void SubmitPolygon()
             reusedvertices[0] = LastStripPolygon->Vertices[id0];
             reusedvertices[1] = LastStripPolygon->Vertices[id1];
 
-            clippedvertices[0][0] = *reusedvertices[0];
-            clippedvertices[0][1] = *reusedvertices[1];
-            clippedvertices[1][0] = *reusedvertices[0];
-            clippedvertices[1][1] = *reusedvertices[1];
+            clippedvertices[0] = *reusedvertices[0];
+            clippedvertices[1] = *reusedvertices[1];
 
             clipstart = 2;
         }
     }
 
-    // clip.
-    // for each vertex:
-    // if it's outside, check if the previous and next vertices are inside
-    // if so, place a new vertex at the edge of the view volume
-
-    // X clipping
-
-    c = clipstart;
     for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
+        clippedvertices[i] = TempVertexBuffer[i];
 
-        Vertex vtx = TempVertexBuffer[i];
-        if (vtx.Position[0] > vtx.Position[3])
-        {
-            Vertex* vprev = &TempVertexBuffer[prev];
-            if (vprev->Position[0] <= vprev->Position[3])
-            {
-                ClipSegment<0, 1>(&clippedvertices[0][c], &vtx, vprev);
-                c++;
-            }
+    // clipping
 
-            Vertex* vnext = &TempVertexBuffer[next];
-            if (vnext->Position[0] <= vnext->Position[3])
-            {
-                ClipSegment<0, 1>(&clippedvertices[0][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[0][c++] = vtx;
-    }
+    nverts = ClipPolygon<true>(clippedvertices, nverts, clipstart);
 
-    nverts = c; c = clipstart;
-    for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
-
-        Vertex vtx = clippedvertices[0][i];
-        if (vtx.Position[0] < -vtx.Position[3])
-        {
-            Vertex* vprev = &clippedvertices[0][prev];
-            if (vprev->Position[0] >= -vprev->Position[3])
-            {
-                ClipSegment<0, -1>(&clippedvertices[1][c], &vtx, vprev);
-                c++;
-            }
-
-            Vertex* vnext = &clippedvertices[0][next];
-            if (vnext->Position[0] >= -vnext->Position[3])
-            {
-                ClipSegment<0, -1>(&clippedvertices[1][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[1][c++] = vtx;
-    }
-
-    for (int i = 0; i < c; i++)
-    {
-        Vertex* vtx = &clippedvertices[1][i];
-
-        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
-        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
-        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
-    }
-
-    // Y clipping
-
-    nverts = c; c = clipstart;
-    for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
-
-        Vertex vtx = clippedvertices[1][i];
-        if (vtx.Position[1] > vtx.Position[3])
-        {
-            Vertex* vprev = &clippedvertices[1][prev];
-            if (vprev->Position[1] <= vprev->Position[3])
-            {
-                ClipSegment<1, 1>(&clippedvertices[0][c], &vtx, vprev);
-                c++;
-            }
-
-            Vertex* vnext = &clippedvertices[1][next];
-            if (vnext->Position[1] <= vnext->Position[3])
-            {
-                ClipSegment<1, 1>(&clippedvertices[0][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[0][c++] = vtx;
-    }
-
-    nverts = c; c = clipstart;
-    for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
-
-        Vertex vtx = clippedvertices[0][i];
-        if (vtx.Position[1] < -vtx.Position[3])
-        {
-            Vertex* vprev = &clippedvertices[0][prev];
-            if (vprev->Position[1] >= -vprev->Position[3])
-            {
-                ClipSegment<1, -1>(&clippedvertices[1][c], &vtx, vprev);
-                c++;
-            }
-
-            Vertex* vnext = &clippedvertices[0][next];
-            if (vnext->Position[1] >= -vnext->Position[3])
-            {
-                ClipSegment<1, -1>(&clippedvertices[1][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[1][c++] = vtx;
-    }
-
-    for (int i = 0; i < c; i++)
-    {
-        Vertex* vtx = &clippedvertices[1][i];
-
-        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
-        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
-        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
-    }
-
-    // Z clipping
-
-    bool farplaneclip = false;
-    nverts = c; c = clipstart;
-    for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
-
-        Vertex vtx = clippedvertices[1][i];
-        if (vtx.Position[2] > vtx.Position[3])
-        {
-            farplaneclip = true;
-
-            Vertex* vprev = &clippedvertices[1][prev];
-            if (vprev->Position[2] <= vprev->Position[3])
-            {
-                ClipSegment<2, 1>(&clippedvertices[0][c], &vtx, vprev);
-                c++;
-            }
-
-            Vertex* vnext = &clippedvertices[1][next];
-            if (vnext->Position[2] <= vnext->Position[3])
-            {
-                ClipSegment<2, 1>(&clippedvertices[0][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[0][c++] = vtx;
-    }
-
-    if (farplaneclip && (!(CurPolygonAttr & (1<<12))))
-        return;
-
-    nverts = c; c = clipstart;
-    for (int i = clipstart; i < nverts; i++)
-    {
-        prev = i-1; if (prev < 0) prev = nverts-1;
-        next = i+1; if (next >= nverts) next = 0;
-
-        Vertex vtx = clippedvertices[0][i];
-        if (vtx.Position[2] < -vtx.Position[3])
-        {
-            Vertex* vprev = &clippedvertices[0][prev];
-            if (vprev->Position[2] >= -vprev->Position[3])
-            {
-                ClipSegment<2, -1>(&clippedvertices[1][c], &vtx, vprev);
-                c++;
-            }
-
-            Vertex* vnext = &clippedvertices[0][next];
-            if (vnext->Position[2] >= -vnext->Position[3])
-            {
-                ClipSegment<2, -1>(&clippedvertices[1][c], &vtx, vnext);
-                c++;
-            }
-        }
-        else
-            clippedvertices[1][c++] = vtx;
-    }
-
-    for (int i = 0; i < c; i++)
-    {
-        Vertex* vtx = &clippedvertices[1][i];
-
-        vtx->Color[0] &= ~0xFFF; vtx->Color[0] += 0xFFF;
-        vtx->Color[1] &= ~0xFFF; vtx->Color[1] += 0xFFF;
-        vtx->Color[2] &= ~0xFFF; vtx->Color[2] += 0xFFF;
-    }
-
-    if (c == 0)
+    if (nverts == 0)
     {
         LastStripPolygon = NULL;
         return;
@@ -771,10 +700,10 @@ void SubmitPolygon()
 
     // build the actual polygon
 
-    if (NumPolygons >= 2048 || NumVertices+c > 6144)
+    if (NumPolygons >= 2048 || NumVertices+nverts > 6144)
     {
         LastStripPolygon = NULL;
-        // TODO: set DISP3DCNT overflow flag
+        DispCnt |= (1<<13);
         return;
     }
 
@@ -789,11 +718,19 @@ void SubmitPolygon()
 
     u32 texfmt = (TexParam >> 26) & 0x7;
     u32 polyalpha = (CurPolygonAttr >> 16) & 0x1F;
-    poly->Translucent = (texfmt == 1 || texfmt == 6 || (polyalpha > 0 && polyalpha < 31));
+    poly->Translucent = ((texfmt == 1 || texfmt == 6) && !(CurPolygonAttr & 0x10)) || (polyalpha > 0 && polyalpha < 31);
+
+    poly->IsShadowMask = ((CurPolygonAttr & 0x3F000030) == 0x00000030);
+    if ((NumPolygons == 1) || (!CurPolygonRAM[NumPolygons-2].IsShadowMask))
+        poly->ClearStencil = poly->IsShadowMask;
+    else
+        poly->ClearStencil = false;
+
+    poly->IsShadow = ((CurPolygonAttr & 0x30) == 0x30) && !poly->IsShadowMask;
 
     if (LastStripPolygon && clipstart > 0)
     {
-        if (c == lastpolyverts)
+        if (nverts == lastpolyverts)
         {
             poly->Vertices[0] = reusedvertices[0];
             poly->Vertices[1] = reusedvertices[1];
@@ -813,10 +750,10 @@ void SubmitPolygon()
         poly->NumVertices += 2;
     }
 
-    for (int i = clipstart; i < c; i++)
+    for (int i = clipstart; i < nverts; i++)
     {
         Vertex* vtx = &CurVertexRAM[NumVertices];
-        *vtx = clippedvertices[1][i];
+        *vtx = clippedvertices[i];
         poly->Vertices[i] = vtx;
 
         NumVertices++;
@@ -834,24 +771,29 @@ void SubmitPolygon()
         }
         else
         {
+            // W is normalized, such that all the polygon's W values fit within 16 bits
+            // the viewport transform for X and Y uses the original W values, but
+            // the transform for Z uses the normalized W values
+            // W normalization is applied to separate polygons, even within strips
+
             posX = (((s64)(vtx->Position[0] + w) * Viewport[2]) / (((s64)w) << 1)) + Viewport[0];
             posY = (((s64)(-vtx->Position[1] + w) * Viewport[3]) / (((s64)w) << 1)) + Viewport[1];
 
-            if (FlushAttributes & 0x2) posZ = w;
-            else                       posZ = (((s64)vtx->Position[2] * 0x800000) / w) + 0x7FFEFF;
+            //if (FlushAttributes & 0x2) posZ = w;
+            //else                       posZ = (((s64)vtx->Position[2] * 0x800000) / w) + 0x7FFEFF;
         }
 
         if      (posX < 0)        posX = 0;
         else if (posX > 256)      posX = 256;
         if      (posY < 0)        posY = 0;
         else if (posY > 192)      posY = 192;
-        if      (posZ < 0)        posZ = 0;
-        else if (posZ > 0xFFFFFF) posZ = 0xFFFFFF;
+        //if      (posZ < 0)        posZ = 0;
+        //else if (posZ > 0xFFFFFF) posZ = 0xFFFFFF;
 
         vtx->FinalPosition[0] = posX;
         vtx->FinalPosition[1] = posY;
-        vtx->FinalPosition[2] = posZ;
-        vtx->FinalPosition[3] = w;
+        //vtx->FinalPosition[2] = posZ;
+        //vtx->FinalPosition[3] = w;
 
         vtx->FinalColor[0] = vtx->Color[0] >> 12;
         if (vtx->FinalColor[0]) vtx->FinalColor[0] = ((vtx->FinalColor[0] << 4) + 0xF);
@@ -862,11 +804,15 @@ void SubmitPolygon()
     }
 
     // determine bounds of the polygon
+    // also determine the W shift and normalize W
+    // TODO: normalization works both ways
+
     u32 vtop = 0, vbot = 0;
     s32 ytop = 192, ybot = 0;
     s32 xtop = 256, xbot = 0;
+    u32 wshift = 0;
 
-    for (int i = 0; i < c; i++)
+    for (int i = 0; i < nverts; i++)
     {
         Vertex* vtx = poly->Vertices[i];
 
@@ -882,11 +828,35 @@ void SubmitPolygon()
             ybot = vtx->FinalPosition[1];
             vbot = i;
         }
+
+        u32 w = (u32)vtx->Position[3];
+        while ((w >> wshift) & 0xFFFF0000)
+            wshift += 4;
     }
 
     poly->VTop = vtop; poly->VBottom = vbot;
     poly->YTop = ytop; poly->YBottom = ybot;
     poly->XTop = xtop; poly->XBottom = xbot;
+    poly->WShift = wshift;
+
+    for (int i = 0; i < nverts; i++)
+    {
+        Vertex* vtx = poly->Vertices[i];
+        s32 w = vtx->Position[3] >> wshift;
+
+        s32 z;
+        if (FlushAttributes & 0x2)
+            z = w << wshift;
+        else
+            z = (((s64)vtx->Position[2] * 0x800000) / (w << wshift)) + 0x7FFEFF;
+
+        // checkme
+        if (z < 0) z = 0;
+        else if (z > 0xFFFFFF) z = 0xFFFFFF;
+
+        poly->FinalZ[i] = z;
+        poly->FinalW[i] = w;
+    }
 
     if (PolygonMode >= 2)
         LastStripPolygon = poly;
@@ -898,6 +868,8 @@ void SubmitVertex()
 {
     s64 vertex[4] = {(s64)CurVertex[0], (s64)CurVertex[1], (s64)CurVertex[2], 0x1000};
     Vertex* vertextrans = &TempVertexBuffer[VertexNumInPoly];
+
+    //printf("vertex: %08X %08X %08X, %d %d %d\n", CurVertex[0], CurVertex[1], CurVertex[2], VertexColor[0], VertexColor[1], VertexColor[2]);
 
     UpdateClipMatrix();
     vertextrans->Position[0] = (vertex[0]*ClipMatrix[0] + vertex[1]*ClipMatrix[4] + vertex[2]*ClipMatrix[8] + vertex[3]*ClipMatrix[12]) >> 12;
@@ -989,6 +961,8 @@ void SubmitVertex()
 
 s32 CalculateLighting()
 {
+    // TODO: this requires matrix mode 2, apparently
+
     if ((TexParam >> 30) == 2)
     {
         TexCoords[0] = RawTexCoords[0] + (((s64)Normal[0]*TexMatrix[0] + (s64)Normal[1]*TexMatrix[4] + (s64)Normal[2]*TexMatrix[8]) >> 21);
@@ -1055,6 +1029,134 @@ s32 CalculateLighting()
 }
 
 
+void BoxTest(u32* params)
+{
+    Vertex cube[8];
+    Vertex face[10];
+    int res;
+
+    GXStat &= ~(1<<1);
+
+    s32 x0 = (s32)(s16)(params[0] & 0xFFFF);
+    s32 y0 = ((s32)params[0]) >> 16;
+    s32 z0 = (s32)(s16)(params[1] & 0xFFFF);
+    s32 x1 = ((s32)params[1]) >> 16;
+    s32 y1 = (s32)(s16)(params[2] & 0xFFFF);
+    s32 z1 = ((s32)params[2]) >> 16;
+
+    x1 += x0;
+    y1 += y0;
+    z1 += z0;
+
+    cube[0].Position[0] = x0; cube[0].Position[1] = y0; cube[0].Position[2] = z0;
+    cube[1].Position[0] = x1; cube[1].Position[1] = y0; cube[1].Position[2] = z0;
+    cube[2].Position[0] = x1; cube[2].Position[1] = y1; cube[2].Position[2] = z0;
+    cube[3].Position[0] = x0; cube[3].Position[1] = y1; cube[3].Position[2] = z0;
+    cube[4].Position[0] = x0; cube[4].Position[1] = y1; cube[4].Position[2] = z1;
+    cube[5].Position[0] = x0; cube[5].Position[1] = y0; cube[5].Position[2] = z1;
+    cube[6].Position[0] = x1; cube[6].Position[1] = y0; cube[6].Position[2] = z1;
+    cube[7].Position[0] = x1; cube[7].Position[1] = y1; cube[7].Position[2] = z1;
+
+    UpdateClipMatrix();
+    for (int i = 0; i < 8; i++)
+    {
+        s32 x = cube[i].Position[0];
+        s32 y = cube[i].Position[1];
+        s32 z = cube[i].Position[2];
+
+        cube[i].Position[0] = ((s64)x*ClipMatrix[0] + (s64)y*ClipMatrix[4] + (s64)z*ClipMatrix[8] + 0x1000*ClipMatrix[12]) >> 12;
+        cube[i].Position[1] = ((s64)x*ClipMatrix[1] + (s64)y*ClipMatrix[5] + (s64)z*ClipMatrix[9] + 0x1000*ClipMatrix[13]) >> 12;
+        cube[i].Position[2] = ((s64)x*ClipMatrix[2] + (s64)y*ClipMatrix[6] + (s64)z*ClipMatrix[10] + 0x1000*ClipMatrix[14]) >> 12;
+        cube[i].Position[3] = ((s64)x*ClipMatrix[3] + (s64)y*ClipMatrix[7] + (s64)z*ClipMatrix[11] + 0x1000*ClipMatrix[15]) >> 12;
+    }
+
+    // front face (-Z)
+    face[0] = cube[0]; face[1] = cube[1]; face[2] = cube[2]; face[3] = cube[3];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+
+    // back face (+Z)
+    face[0] = cube[4]; face[1] = cube[5]; face[2] = cube[6]; face[3] = cube[7];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+
+    // left face (-X)
+    face[0] = cube[0]; face[1] = cube[3]; face[2] = cube[4]; face[3] = cube[5];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+
+    // right face (+X)
+    face[0] = cube[1]; face[1] = cube[2]; face[2] = cube[7]; face[3] = cube[6];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+
+    // bottom face (-Y)
+    face[0] = cube[0]; face[1] = cube[1]; face[2] = cube[6]; face[3] = cube[5];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+
+    // top face (+Y)
+    face[0] = cube[2]; face[1] = cube[3]; face[2] = cube[4]; face[3] = cube[7];
+    res = ClipPolygon<false>(face, 4, 0);
+    if (res > 0)
+    {
+        GXStat |= (1<<1);
+        return;
+    }
+}
+
+void PosTest()
+{
+    s64 vertex[4] = {(s64)CurVertex[0], (s64)CurVertex[1], (s64)CurVertex[2], 0x1000};
+
+    UpdateClipMatrix();
+    PosTestResult[0] = (vertex[0]*ClipMatrix[0] + vertex[1]*ClipMatrix[4] + vertex[2]*ClipMatrix[8] + vertex[3]*ClipMatrix[12]) >> 12;
+    PosTestResult[1] = (vertex[0]*ClipMatrix[1] + vertex[1]*ClipMatrix[5] + vertex[2]*ClipMatrix[9] + vertex[3]*ClipMatrix[13]) >> 12;
+    PosTestResult[2] = (vertex[0]*ClipMatrix[2] + vertex[1]*ClipMatrix[6] + vertex[2]*ClipMatrix[10] + vertex[3]*ClipMatrix[14]) >> 12;
+    PosTestResult[3] = (vertex[0]*ClipMatrix[3] + vertex[1]*ClipMatrix[7] + vertex[2]*ClipMatrix[11] + vertex[3]*ClipMatrix[15]) >> 12;
+}
+
+void VecTest(u32* params)
+{
+    // TODO: apparently requires matrix mode 2
+    // TODO: maybe it overwrites the normal registers, too
+
+    s16 normal[3];
+
+    normal[0] = (s16)((params[0] & 0x000003FF) << 6) >> 6;
+    normal[1] = (s16)((params[0] & 0x000FFC00) >> 4) >> 6;
+    normal[2] = (s16)((params[0] & 0x3FF00000) >> 14) >> 6;
+
+    VecTestResult[0] = (normal[0]*VecMatrix[0] + normal[1]*VecMatrix[4] + normal[2]*VecMatrix[8]) >> 9;
+    VecTestResult[1] = (normal[0]*VecMatrix[1] + normal[1]*VecMatrix[5] + normal[2]*VecMatrix[9]) >> 9;
+    VecTestResult[2] = (normal[0]*VecMatrix[2] + normal[1]*VecMatrix[6] + normal[2]*VecMatrix[10]) >> 9;
+
+    if (VecTestResult[0] & 0x1000) VecTestResult[0] |= 0xF000;
+    if (VecTestResult[1] & 0x1000) VecTestResult[1] |= 0xF000;
+    if (VecTestResult[2] & 0x1000) VecTestResult[2] |= 0xF000;
+}
+
+
 
 void CmdFIFOWrite(CmdFIFOEntry& entry)
 {
@@ -1080,6 +1182,17 @@ void CmdFIFOWrite(CmdFIFOEntry& entry)
         }
 
         CmdFIFO->Write(entry);
+    }
+
+    if (entry.Command == 0x11 || entry.Command == 0x12)
+    {
+        GXStat |= (1<<14); // push/pop matrix
+        NumPushPopCommands++;
+    }
+    else if (entry.Command == 0x70 || entry.Command == 0x71 || entry.Command == 0x72)
+    {
+        GXStat |= (1<<0); // box/pos/vec test
+        NumTestCommands++;
     }
 }
 
@@ -1117,7 +1230,6 @@ void ExecuteCommand()
         CycleCount += CmdNumCycles[entry.Command];
         ExecParamCount = 0;
 
-        GXStat &= ~(1<<14);
         if (CycleCount > 0)
             GXStat |= (1<<27);
 
@@ -1128,6 +1240,7 @@ void ExecuteCommand()
             break;
 
         case 0x11: // push matrix
+            NumPushPopCommands--;
             if (MatrixMode == 0)
             {
                 if (ProjMatrixStackPointer > 0)
@@ -1139,7 +1252,6 @@ void ExecuteCommand()
 
                 memcpy(ProjMatrixStack, ProjMatrix, 16*4);
                 ProjMatrixStackPointer++;
-                GXStat |= (1<<14);
             }
             else if (MatrixMode == 3)
             {
@@ -1152,7 +1264,6 @@ void ExecuteCommand()
 
                 memcpy(TexMatrixStack, TexMatrix, 16*4);
                 TexMatrixStackPointer++;
-                GXStat |= (1<<14);
             }
             else
             {
@@ -1164,14 +1275,13 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrixStack[PosMatrixStackPointer], PosMatrix, 16*4);
-                if (MatrixMode == 2)
-                    memcpy(VecMatrixStack[PosMatrixStackPointer], VecMatrix, 16*4);
+                memcpy(VecMatrixStack[PosMatrixStackPointer], VecMatrix, 16*4);
                 PosMatrixStackPointer++;
-                GXStat |= (1<<14);
             }
             break;
 
         case 0x12: // pop matrix
+            NumPushPopCommands--;
             if (MatrixMode == 0)
             {
                 if (ProjMatrixStackPointer <= 0)
@@ -1183,7 +1293,6 @@ void ExecuteCommand()
 
                 ProjMatrixStackPointer--;
                 memcpy(ProjMatrix, ProjMatrixStack, 16*4);
-                GXStat |= (1<<14);
                 ClipMatrixDirty = true;
             }
             else if (MatrixMode == 3)
@@ -1197,7 +1306,6 @@ void ExecuteCommand()
 
                 TexMatrixStackPointer--;
                 memcpy(TexMatrix, TexMatrixStack, 16*4);
-                GXStat |= (1<<14);
             }
             else
             {
@@ -1213,9 +1321,7 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrix, PosMatrixStack[PosMatrixStackPointer], 16*4);
-                if (MatrixMode == 2)
-                    memcpy(VecMatrix, VecMatrixStack[PosMatrixStackPointer], 16*4);
-                GXStat |= (1<<14);
+                memcpy(VecMatrix, VecMatrixStack[PosMatrixStackPointer], 16*4);
                 ClipMatrixDirty = true;
             }
             break;
@@ -1240,8 +1346,7 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrixStack[addr], PosMatrix, 16*4);
-                if (MatrixMode == 2)
-                    memcpy(VecMatrixStack[addr], VecMatrix, 16*4);
+                memcpy(VecMatrixStack[addr], VecMatrix, 16*4);
             }
             break;
 
@@ -1266,8 +1371,7 @@ void ExecuteCommand()
                 }
 
                 memcpy(PosMatrix, PosMatrixStack[addr], 16*4);
-                if (MatrixMode == 2)
-                    memcpy(VecMatrix, VecMatrixStack[addr], 16*4);
+                memcpy(VecMatrix, VecMatrixStack[addr], 16*4);
                 ClipMatrixDirty = true;
             }
             break;
@@ -1570,16 +1674,35 @@ void ExecuteCommand()
             break;
 
         case 0x50: // flush
-            FlushRequest = 1;
+            FlushRequest |= 0x1;
             FlushAttributes = ExecParams[0] & 0x3;
             CycleCount = 392;
             break;
 
         case 0x60: // viewport x1,y1,x2,y2
+            // note: viewport Y coordinates are upside-down
             Viewport[0] = ExecParams[0] & 0xFF;
-            Viewport[1] = (ExecParams[0] >> 8) & 0xFF;
+            Viewport[1] = 191 - (ExecParams[0] >> 24);
             Viewport[2] = ((ExecParams[0] >> 16) & 0xFF) - Viewport[0] + 1;
-            Viewport[3] = (ExecParams[0] >> 24) - Viewport[1] + 1;
+            Viewport[3] = (191 - ((ExecParams[0] >> 8) & 0xFF)) - Viewport[1] + 1;
+            break;
+
+        case 0x70: // box test
+            NumTestCommands -= 3;
+            BoxTest(ExecParams);
+            break;
+
+        case 0x71: // pos test
+            NumTestCommands -= 2;
+            CurVertex[0] = ExecParams[0] & 0xFFFF;
+            CurVertex[1] = ExecParams[0] >> 16;
+            CurVertex[2] = ExecParams[1] & 0xFFFF;
+            PosTest();
+            break;
+
+        case 0x72: // vec test
+            NumTestCommands--;
+            VecTest(ExecParams);
             break;
 
         default:
@@ -1592,7 +1715,7 @@ void ExecuteCommand()
 
 void Run(s32 cycles)
 {
-    if (FlushRequest)
+    if (FlushRequest & 0x1)
         return;
     if (CycleCount <= 0 && CmdPIPE->IsEmpty())
         return;
@@ -1602,13 +1725,21 @@ void Run(s32 cycles)
     if (CycleCount <= 0)
     {
         while (CycleCount <= 0 && !CmdPIPE->IsEmpty())
+        {
+            if (NumPushPopCommands == 0) GXStat &= ~(1<<14);
+            if (NumTestCommands == 0)    GXStat &= ~(1<<0);
+
             ExecuteCommand();
+        }
     }
 
     if (CycleCount <= 0 && CmdPIPE->IsEmpty())
     {
         CycleCount = 0;
-        GXStat &= ~((1<<27)|(1<<14));
+        GXStat &= ~(1<<27);
+
+        if (NumPushPopCommands == 0) GXStat &= ~(1<<14);
+        if (NumTestCommands == 0)    GXStat &= ~(1<<0);
     }
 }
 
@@ -1635,9 +1766,15 @@ void CheckFIFODMA()
 
 void VBlank()
 {
-    if (FlushRequest)
+    if (FlushRequest & 0x1)
     {
-        SoftRenderer::RenderFrame(CurVertexRAM, CurPolygonRAM, NumPolygons);
+        RenderVertexRAM = CurVertexRAM;
+        RenderPolygonRAM = CurPolygonRAM;
+        RenderNumPolygons = NumPolygons;
+
+        // TODO: find out which other registers are latched for rendering
+        RenderClearAttr1 = ClearAttr1;
+        RenderClearAttr2 = ClearAttr2;
 
         CurRAMBank = CurRAMBank?0:1;
         CurVertexRAM = &VertexRAM[CurRAMBank ? 6144 : 0];
@@ -1646,13 +1783,66 @@ void VBlank()
         NumVertices = 0;
         NumPolygons = 0;
 
-        FlushRequest = 0;
+        FlushRequest &= ~0x1;
+        FlushRequest |= 0x2;
+    }
+}
+
+void VCount215()
+{
+    // TODO: detect other conditions that could require rerendering
+    // the DS is said to present new 3D frames all the time, even if no commands are sent
+
+    if (FlushRequest & 0x2)
+    {
+        SoftRenderer::RenderFrame(RenderVertexRAM, RenderPolygonRAM, RenderNumPolygons);
+
+        FlushRequest &= ~0x2;
     }
 }
 
 u32* GetLine(int line)
 {
     return SoftRenderer::GetLine(line);
+}
+
+
+void WriteToGXFIFO(u32 val)
+{
+    if (NumCommands == 0)
+    {
+        NumCommands = 4;
+        CurCommand = val;
+        ParamCount = 0;
+        TotalParams = CmdNumParams[CurCommand & 0xFF];
+
+        if (TotalParams > 0) return;
+    }
+    else
+        ParamCount++;
+
+    for (;;)
+    {
+        if ((CurCommand & 0xFF) || (NumCommands == 4 && CurCommand == 0))
+        {
+            CmdFIFOEntry entry;
+            entry.Command = CurCommand & 0xFF;
+            entry.Param = val;
+            CmdFIFOWrite(entry);
+        }
+
+        if (ParamCount >= TotalParams)
+        {
+            CurCommand >>= 8;
+            NumCommands--;
+            if (NumCommands == 0) break;
+
+            ParamCount = 0;
+            TotalParams = CmdNumParams[CurCommand & 0xFF];
+        }
+        if (ParamCount < TotalParams)
+            break;
+    }
 }
 
 
@@ -1668,6 +1858,18 @@ u16 Read16(u32 addr)
     {
     case 0x04000060:
         return DispCnt;
+
+    case 0x04000320:
+        return 46; // TODO, eventually
+
+    case 0x04000604:
+        return NumPolygons;
+    case 0x04000606:
+        return NumVertices;
+
+    case 0x04000630: return VecTestResult[0];
+    case 0x04000632: return VecTestResult[1];
+    case 0x04000634: return VecTestResult[2];
     }
 
     printf("unknown GPU3D read16 %08X\n", addr);
@@ -1695,6 +1897,14 @@ u32 Read32(u32 addr)
                    (fifolevel < 128 ? (1<<25) : 0) |
                    (fifolevel == 0  ? (1<<26) : 0);
         }
+
+    case 0x04000604:
+        return NumPolygons | (NumVertices << 16);
+
+    case 0x04000620: return PosTestResult[0];
+    case 0x04000624: return PosTestResult[1];
+    case 0x04000628: return PosTestResult[2];
+    case 0x0400062C: return PosTestResult[3];
 
     case 0x04000680: return VecMatrix[0];
     case 0x04000684: return VecMatrix[1];
@@ -1740,7 +1950,9 @@ void Write16(u32 addr, u16 val)
     switch (addr)
     {
     case 0x04000060:
-        DispCnt = val;
+        DispCnt = (val & 0x4FFF) | (DispCnt & 0x3000);
+        if (val & (1<<12)) DispCnt &= ~(1<<12);
+        if (val & (1<<13)) DispCnt &= ~(1<<13);
         return;
 
     case 0x04000340:
@@ -1799,7 +2011,9 @@ void Write32(u32 addr, u32 val)
     switch (addr)
     {
     case 0x04000060:
-        DispCnt = val & 0xFFFF;
+        DispCnt = (val & 0x4FFF) | (DispCnt & 0x3000);
+        if (val & (1<<12)) DispCnt &= ~(1<<12);
+        if (val & (1<<13)) DispCnt &= ~(1<<13);
         return;
 
     case 0x04000340:
@@ -1837,41 +2051,7 @@ void Write32(u32 addr, u32 val)
 
     if (addr >= 0x04000400 && addr < 0x04000440)
     {
-        if (NumCommands == 0)
-        {
-            NumCommands = 4;
-            CurCommand = val;
-            ParamCount = 0;
-            TotalParams = CmdNumParams[CurCommand & 0xFF];
-
-            if (TotalParams > 0) return;
-        }
-        else
-            ParamCount++;
-
-        for (;;)
-        {
-            if ((CurCommand & 0xFF) || (NumCommands == 4 && CurCommand == 0))
-            {
-                CmdFIFOEntry entry;
-                entry.Command = CurCommand & 0xFF;
-                entry.Param = val;
-                CmdFIFOWrite(entry);
-            }
-
-            if (ParamCount >= TotalParams)
-            {
-                CurCommand >>= 8;
-                NumCommands--;
-                if (NumCommands == 0) break;
-
-                ParamCount = 0;
-                TotalParams = CmdNumParams[CurCommand & 0xFF];
-            }
-            if (ParamCount < TotalParams)
-                break;
-        }
-
+        WriteToGXFIFO(val);
         return;
     }
 

@@ -25,6 +25,7 @@
 #include "DMA.h"
 #include "FIFO.h"
 #include "GPU.h"
+#include "SPU.h"
 #include "SPI.h"
 #include "RTC.h"
 #include "Wifi.h"
@@ -40,11 +41,6 @@ namespace NDS
 // TODO LIST
 // * stick all the variables in a big structure?
 //   would make it easier to deal with savestates
-
-/*SchedEvent SchedBuffer[SCHED_BUF_LEN];
-SchedEvent* SchedQueue;
-
-bool NeedReschedule;*/
 
 ARM* ARM9;
 ARM* ARM7;
@@ -112,8 +108,6 @@ u32 SqrtRes;
 
 u32 KeyInput;
 
-u16 _soundbias; // temp
-
 bool Running;
 
 
@@ -136,6 +130,7 @@ bool Init()
 
     if (!NDSCart::Init()) return false;
     if (!GPU::Init()) return false;
+    if (!SPU::Init()) return false;
     if (!SPI::Init()) return false;
     if (!RTC::Init()) return false;
 
@@ -155,6 +150,7 @@ void DeInit()
 
     NDSCart::DeInit();
     GPU::DeInit();
+    SPU::DeInit();
     SPI::DeInit();
     RTC::DeInit();
 }
@@ -210,13 +206,29 @@ void SetupDirectBoot()
     CP15::Write(0x911, 0x00000020);
     CP15::Write(0x100, 0x00050000);
 
+    ARM9->R[12] = bootparams[1];
+    ARM9->R[13] = 0x03002F7C;
+    ARM9->R[14] = bootparams[1];
+    ARM9->R_IRQ[0] = 0x03003F80;
+    ARM9->R_SVC[0] = 0x03003FC0;
+
+    ARM7->R[12] = bootparams[5];
+    ARM7->R[13] = 0x0380FD80;
+    ARM7->R[14] = bootparams[5];
+    ARM7->R_IRQ[0] = 0x0380FF80;
+    ARM7->R_SVC[0] = 0x0380FFC0;
+
     ARM9->JumpTo(bootparams[1]);
     ARM7->JumpTo(bootparams[5]);
 
     PowerControl9 = 0x820F;
     GPU::DisplaySwap(PowerControl9);
 
+    SPU::SetBias(0x200);
+
     ARM7BIOSProt = 0x1204;
+
+    SPI_Firmware::SetupDirectBoot();
 }
 
 void Reset()
@@ -301,14 +313,6 @@ void Reset()
     for (i = 0; i < 8; i++) DMAs[i]->Reset();
     memset(DMA9Fill, 0, 4*4);
 
-    NDSCart::Reset();
-    GPU::Reset();
-    SPI::Reset();
-    RTC::Reset();
-    Wifi::Reset();
-
-   // memset(SchedBuffer, 0, sizeof(SchedEvent)*SCHED_BUF_LEN);
-   // SchedQueue = NULL;
     memset(SchedList, 0, sizeof(SchedList));
     SchedListMask = 0;
 
@@ -320,7 +324,12 @@ void Reset()
 
     KeyInput = 0x007F03FF;
 
-    _soundbias = 0;
+    NDSCart::Reset();
+    GPU::Reset();
+    SPU::Reset();
+    SPI::Reset();
+    RTC::Reset();
+    Wifi::Reset();
 }
 
 void LoadROM(const char* path, bool direct)
@@ -329,6 +338,14 @@ void LoadROM(const char* path, bool direct)
 
     if (NDSCart::LoadROM(path, direct))
         Running = true;
+    else
+        printf("Failed to load ROM %s\n", path);
+}
+
+void LoadBIOS()
+{
+    Reset();
+    Running = true;
 }
 
 
@@ -348,17 +365,6 @@ void CalcIterationCycles()
 
 void RunSystem(s32 cycles)
 {
-    for (int i = 0; i < 8; i++)
-    {
-        if ((Timers[i].Cnt & 0x84) == 0x80)
-            Timers[i].Counter += (ARM9->Cycles >> 1) << Timers[i].CycleShift;
-    }
-    for (int i = 4; i < 8; i++)
-    {
-        if ((Timers[i].Cnt & 0x84) == 0x80)
-            Timers[i].Counter += ARM7->Cycles << Timers[i].CycleShift;
-    }
-
     for (int i = 0; i < Event_MAX; i++)
     {
         if (!(SchedListMask & (1<<i)))
@@ -397,9 +403,6 @@ void RunFrame()
             if (cycles > 0) cycles = DMAs[2]->Run(cycles);
             if (cycles > 0) cycles = DMAs[3]->Run(cycles);
             ndscyclestorun = CurIterationCycles - cycles;
-
-            // TODO: run other timing critical shit, like timers
-            GPU3D::Run(ndscyclestorun);
         }
         else
         {
@@ -570,14 +573,82 @@ bool HaltInterrupted(u32 cpu)
 
 void StopCPU(u32 cpu, u32 mask)
 {
-    if (cpu) mask <<= 16;
-    CPUStop |= mask;
+    if (cpu)
+    {
+        CPUStop |= (mask << 16);
+        ARM7->Halt(2);
+    }
+    else
+    {
+        CPUStop |= mask;
+        ARM9->Halt(2);
+    }
 }
 
 void ResumeCPU(u32 cpu, u32 mask)
 {
     if (cpu) mask <<= 16;
     CPUStop &= ~mask;
+}
+
+
+
+void HandleTimerOverflow(u32 tid)
+{
+    Timer* timer = &Timers[tid];
+
+    timer->Counter += timer->Reload << 16;
+    if (timer->Cnt & (1<<6))
+        SetIRQ(tid >> 2, IRQ_Timer0 + (tid & 0x3));
+
+    if ((tid & 0x3) == 3)
+        return;
+
+    for (;;)
+    {
+        tid++;
+
+        timer = &Timers[tid];
+
+        if ((timer->Cnt & 0x84) != 0x84)
+            break;
+
+        timer->Counter += 0x10000;
+        if (timer->Counter >> 16)
+            break;
+
+        timer->Counter = timer->Reload << 16;
+        if (timer->Cnt & (1<<6))
+            SetIRQ(tid >> 2, IRQ_Timer0 + (tid & 0x3));
+
+        if ((tid & 0x3) == 3)
+            break;
+    }
+}
+
+void RunTimer(u32 tid, s32 cycles)
+{
+    Timer* timer = &Timers[tid];
+    if ((timer->Cnt & 0x84) != 0x80)
+        return;
+
+    u32 oldcount = timer->Counter;
+    timer->Counter += (cycles << timer->CycleShift);
+    if (timer->Counter < oldcount)
+        HandleTimerOverflow(tid);
+}
+
+void RunTimingCriticalDevices(u32 cpu, s32 cycles)
+{
+    RunTimer((cpu<<2)+0, cycles);
+    RunTimer((cpu<<2)+1, cycles);
+    RunTimer((cpu<<2)+2, cycles);
+    RunTimer((cpu<<2)+3, cycles);
+
+    if (cpu == 0)
+    {
+        GPU3D::Run(cycles);
+    }
 }
 
 
@@ -591,58 +662,25 @@ void CheckDMAs(u32 cpu, u32 mode)
     DMAs[cpu+3]->StartIfNeeded(mode);
 }
 
+void StopDMAs(u32 cpu, u32 mode)
+{
+    cpu <<= 2;
+    DMAs[cpu+0]->StopIfNeeded(mode);
+    DMAs[cpu+1]->StopIfNeeded(mode);
+    DMAs[cpu+2]->StopIfNeeded(mode);
+    DMAs[cpu+3]->StopIfNeeded(mode);
+}
 
 
-//const s32 TimerPrescaler[4] = {1, 64, 256, 1024};
+
+
 const s32 TimerPrescaler[4] = {0, 6, 8, 10};
 
 u16 TimerGetCounter(u32 timer)
 {
     u32 ret = Timers[timer].Counter;
 
-    if ((Timers[timer].Cnt & 0x84) == 0x80)
-    {
-        u32 c = (timer & 0x4) ? ARM7->Cycles : (ARM9->Cycles>>1);
-        ret += (c << Timers[timer].CycleShift);
-    }
-
     return ret >> 16;
-}
-
-void TimerOverflow(u32 param)
-{
-    Timer* timer = &Timers[param];
-    timer->Counter = 0;
-
-    u32 tid = param & 0x3;
-    u32 cpu = param >> 2;
-
-    for (;;)
-    {
-        if (tid == (param&0x3))
-            ScheduleEvent(Event_Timer9_0 + param, true, (0x10000 - timer->Reload) << TimerPrescaler[timer->Cnt & 0x03], TimerOverflow, param);
-            //timer->Event = ScheduleEvent(TimerPrescaler[timer->Control&0x3], TimerIncrement, param);
-
-        if (timer->Counter == 0)
-        {
-            timer->Counter = timer->Reload << 16;
-
-            if (timer->Cnt & (1<<6))
-                SetIRQ(cpu, IRQ_Timer0 + tid);
-
-            // cascade
-            if (tid == 3)
-                break;
-            timer++;
-            if ((timer->Cnt & 0x84) != 0x84)
-                break;
-            timer->Counter += 0x10000;
-            tid++;
-            continue;
-        }
-
-        break;
-    }
 }
 
 void TimerStart(u32 id, u16 cnt)
@@ -652,21 +690,11 @@ void TimerStart(u32 id, u16 cnt)
     u16 newstart = cnt & (1<<7);
 
     timer->Cnt = cnt;
+    timer->CycleShift = 16 - TimerPrescaler[cnt & 0x03];
 
     if ((!curstart) && newstart)
     {
         timer->Counter = timer->Reload << 16;
-        timer->CycleShift = 16 - TimerPrescaler[cnt & 0x03];
-
-        // start the timer, if it's not a cascading timer
-        if (!(cnt & (1<<2)))
-            ScheduleEvent(Event_Timer9_0 + id, false, (0x10000 - timer->Reload) << TimerPrescaler[cnt & 0x03], TimerOverflow, id);
-        else
-            CancelEvent(Event_Timer9_0 + id);
-    }
-    else if (curstart && (!newstart))
-    {
-        CancelEvent(Event_Timer9_0 + id);
     }
 }
 
@@ -798,8 +826,11 @@ void debug(u32 param)
     printf("ARM9 PC=%08X LR=%08X %08X\n", ARM9->R[15], ARM9->R[14], ARM9->R_IRQ[1]);
     printf("ARM7 PC=%08X LR=%08X %08X\n", ARM7->R[15], ARM7->R[14], ARM7->R_IRQ[1]);
 
-    for (int i = 0; i < 9; i++)
-        printf("VRAM %c: %02X\n", 'A'+i, GPU::VRAMCNT[i]);
+    printf("ARM9 IME=%08X IE=%08X IF=%08X\n", IME[0], IE[0], IF[0]);
+    printf("ARM7 IME=%08X IE=%08X IF=%08X\n", IME[1], IE[1], IF[1]);
+
+    //for (int i = 0; i < 9; i++)
+    //    printf("VRAM %c: %02X\n", 'A'+i, GPU::VRAMCNT[i]);
 }
 
 
@@ -1192,7 +1223,7 @@ void ARM7Write8(u32 addr, u8 val)
         return;
     }
 
-    printf("unknown arm7 write8 %08X %02X | %08X | %08X %08X %08X %08X\n", addr, val, ARM7->R[15], IME[1], IE[1], ARM7->R[0], ARM7->R[1]);
+    printf("unknown arm7 write8 %08X %02X @ %08X\n", addr, val, ARM7->R[15]);
 }
 
 void ARM7Write16(u32 addr, u16 val)
@@ -1227,7 +1258,7 @@ void ARM7Write16(u32 addr, u16 val)
         return;
     }
 
-    printf("unknown arm7 write16 %08X %04X | %08X\n", addr, val, ARM7->R[15]);
+    printf("unknown arm7 write16 %08X %04X @ %08X\n", addr, val, ARM7->R[15]);
 }
 
 void ARM7Write32(u32 addr, u32 val)
@@ -1258,7 +1289,7 @@ void ARM7Write32(u32 addr, u32 val)
         return;
     }
 
-    printf("unknown arm7 write32 %08X %08X | %08X %08X\n", addr, val, ARM7->R[15], ARM7->CurInstr);
+    printf("unknown arm7 write32 %08X %08X @ %08X\n", addr, val, ARM7->R[15]);
 }
 
 
@@ -1268,7 +1299,19 @@ u8 ARM9IORead8(u32 addr)
 {
     switch (addr)
     {
+    case 0x04000130: return KeyInput & 0xFF;
+    case 0x04000131: return (KeyInput >> 8) & 0xFF;
+
     case 0x040001A2: return NDSCart::ReadSPIData();
+
+    case 0x040001A8: return NDSCart::ROMCommand[0];
+    case 0x040001A9: return NDSCart::ROMCommand[1];
+    case 0x040001AA: return NDSCart::ROMCommand[2];
+    case 0x040001AB: return NDSCart::ROMCommand[3];
+    case 0x040001AC: return NDSCart::ROMCommand[4];
+    case 0x040001AD: return NDSCart::ROMCommand[5];
+    case 0x040001AE: return NDSCart::ROMCommand[6];
+    case 0x040001AF: return NDSCart::ROMCommand[7];
 
     case 0x04000208: return IME[0];
 
@@ -1357,6 +1400,15 @@ u16 ARM9IORead16(u32 addr)
     case 0x040001A0: return NDSCart::SPICnt;
     case 0x040001A2: return NDSCart::ReadSPIData();
 
+    case 0x040001A8: return NDSCart::ROMCommand[0] |
+                           (NDSCart::ROMCommand[1] << 8);
+    case 0x040001AA: return NDSCart::ROMCommand[2] |
+                           (NDSCart::ROMCommand[3] << 8);
+    case 0x040001AC: return NDSCart::ROMCommand[4] |
+                           (NDSCart::ROMCommand[5] << 8);
+    case 0x040001AE: return NDSCart::ROMCommand[6] |
+                           (NDSCart::ROMCommand[7] << 8);
+
     case 0x04000204: return ExMemCnt[0];
     case 0x04000208: return IME[0];
 
@@ -1374,11 +1426,11 @@ u16 ARM9IORead16(u32 addr)
     case 0x04000304: return PowerControl9;
     }
 
-    if (addr >= 0x04000000 && addr < 0x04000060)
+    if ((addr >= 0x04000000 && addr < 0x04000060) || (addr == 0x0400006C))
     {
         return GPU::GPU2D_A->Read16(addr);
     }
-    if (addr >= 0x04001000 && addr < 0x04001060)
+    if ((addr >= 0x04001000 && addr < 0x04001060) || (addr == 0x0400106C))
     {
         return GPU::GPU2D_B->Read16(addr);
     }
@@ -1426,6 +1478,15 @@ u32 ARM9IORead32(u32 addr)
     case 0x040001A0: return NDSCart::SPICnt | (NDSCart::ReadSPIData() << 16);
     case 0x040001A4: return NDSCart::ROMCnt;
 
+    case 0x040001A8: return NDSCart::ROMCommand[0] |
+                           (NDSCart::ROMCommand[1] << 8) |
+                           (NDSCart::ROMCommand[2] << 16) |
+                           (NDSCart::ROMCommand[3] << 24);
+    case 0x040001AC: return NDSCart::ROMCommand[4] |
+                           (NDSCart::ROMCommand[5] << 8) |
+                           (NDSCart::ROMCommand[6] << 16) |
+                           (NDSCart::ROMCommand[7] << 24);
+
     case 0x04000208: return IME[0];
     case 0x04000210: return IE[0];
     case 0x04000214: return IF[0];
@@ -1434,6 +1495,7 @@ u32 ARM9IORead32(u32 addr)
     case 0x04000244: return GPU::VRAMCNT[4] | (GPU::VRAMCNT[5] << 8) | (GPU::VRAMCNT[6] << 16) | (WRAMCnt << 24);
     case 0x04000248: return GPU::VRAMCNT[7] | (GPU::VRAMCNT[8] << 8);
 
+    case 0x04000280: return DivCnt;
     case 0x04000290: return DivNumerator[0];
     case 0x04000294: return DivNumerator[1];
     case 0x04000298: return DivDenominator[0];
@@ -1443,6 +1505,7 @@ u32 ARM9IORead32(u32 addr)
     case 0x040002A8: return DivRemainder[0];
     case 0x040002AC: return DivRemainder[1];
 
+    case 0x040002B0: return SqrtCnt;
     case 0x040002B4: return SqrtRes;
     case 0x040002B8: return SqrtVal[0];
     case 0x040002BC: return SqrtVal[1];
@@ -1473,11 +1536,11 @@ u32 ARM9IORead32(u32 addr)
         return 0;
     }
 
-    if (addr >= 0x04000000 && addr < 0x04000060)
+    if ((addr >= 0x04000000 && addr < 0x04000060) || (addr == 0x0400006C))
     {
         return GPU::GPU2D_A->Read32(addr);
     }
-    if (addr >= 0x04001000 && addr < 0x04001060)
+    if ((addr >= 0x04001000 && addr < 0x04001060) || (addr == 0x0400106C))
     {
         return GPU::GPU2D_B->Read32(addr);
     }
@@ -1592,7 +1655,6 @@ void ARM9IOWrite16(u32 addr, u16 val)
         {
             SetIRQ(1, IRQ_IPCSync);
         }
-        //CompensateARM7();
         return;
 
     case 0x04000184:
@@ -1612,6 +1674,23 @@ void ARM9IOWrite16(u32 addr, u16 val)
         return;
     case 0x040001A2:
         NDSCart::WriteSPIData(val & 0xFF);
+        return;
+
+    case 0x040001A8:
+        NDSCart::ROMCommand[0] = val & 0xFF;
+        NDSCart::ROMCommand[1] = val >> 8;
+        return;
+    case 0x040001AA:
+        NDSCart::ROMCommand[2] = val & 0xFF;
+        NDSCart::ROMCommand[3] = val >> 8;
+        return;
+    case 0x040001AC:
+        NDSCart::ROMCommand[4] = val & 0xFF;
+        NDSCart::ROMCommand[5] = val >> 8;
+        return;
+    case 0x040001AE:
+        NDSCart::ROMCommand[6] = val & 0xFF;
+        NDSCart::ROMCommand[7] = val >> 8;
         return;
 
     case 0x040001B8: ROMSeed0[4] = val & 0x7F; return;
@@ -1747,6 +1826,19 @@ void ARM9IOWrite32(u32 addr, u32 val)
         if (!(ExMemCnt[0] & (1<<11))) NDSCart::WriteROMCnt(val);
         return;
 
+    case 0x040001A8:
+        NDSCart::ROMCommand[0] = val & 0xFF;
+        NDSCart::ROMCommand[1] = (val >> 8) & 0xFF;
+        NDSCart::ROMCommand[2] = (val >> 16) & 0xFF;
+        NDSCart::ROMCommand[3] = val >> 24;
+        return;
+    case 0x040001AC:
+        NDSCart::ROMCommand[4] = val & 0xFF;
+        NDSCart::ROMCommand[5] = (val >> 8) & 0xFF;
+        NDSCart::ROMCommand[6] = (val >> 16) & 0xFF;
+        NDSCart::ROMCommand[7] = val >> 24;
+        return;
+
     case 0x040001B0: *(u32*)&ROMSeed0[0] = val; return;
     case 0x040001B4: *(u32*)&ROMSeed1[0] = val; return;
 
@@ -1778,6 +1870,11 @@ void ARM9IOWrite32(u32 addr, u32 val)
 
     case 0x040002B8: SqrtVal[0] = val; StartSqrt(); return;
     case 0x040002BC: SqrtVal[1] = val; StartSqrt(); return;
+
+    case 0x04000304:
+        PowerControl9 = val & 0xFFFF;
+        GPU::DisplaySwap(PowerControl9>>15);
+        return;
     }
 
     if (addr >= 0x04000000 && addr < 0x04000060)
@@ -1804,9 +1901,23 @@ u8 ARM7IORead8(u32 addr)
 {
     switch (addr)
     {
+    case 0x04000130: return KeyInput & 0xFF;
+    case 0x04000131: return (KeyInput >> 8) & 0xFF;
+    case 0x04000136: return (KeyInput >> 16) & 0xFF;
+    case 0x04000137: return KeyInput >> 24;
+
     case 0x04000138: return RTC::Read() & 0xFF;
 
     case 0x040001A2: return NDSCart::ReadSPIData();
+
+    case 0x040001A8: return NDSCart::ROMCommand[0];
+    case 0x040001A9: return NDSCart::ROMCommand[1];
+    case 0x040001AA: return NDSCart::ROMCommand[2];
+    case 0x040001AB: return NDSCart::ROMCommand[3];
+    case 0x040001AC: return NDSCart::ROMCommand[4];
+    case 0x040001AD: return NDSCart::ROMCommand[5];
+    case 0x040001AE: return NDSCart::ROMCommand[6];
+    case 0x040001AF: return NDSCart::ROMCommand[7];
 
     case 0x040001C2: return SPI::ReadData();
 
@@ -1820,8 +1931,7 @@ u8 ARM7IORead8(u32 addr)
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
-        return 0;
+        return SPU::Read8(addr);
     }
 
     printf("unknown ARM7 IO read8 %08X\n", addr);
@@ -1873,6 +1983,15 @@ u16 ARM7IORead16(u32 addr)
     case 0x040001A0: return NDSCart::SPICnt;
     case 0x040001A2: return NDSCart::ReadSPIData();
 
+    case 0x040001A8: return NDSCart::ROMCommand[0] |
+                           (NDSCart::ROMCommand[1] << 8);
+    case 0x040001AA: return NDSCart::ROMCommand[2] |
+                           (NDSCart::ROMCommand[3] << 8);
+    case 0x040001AC: return NDSCart::ROMCommand[4] |
+                           (NDSCart::ROMCommand[5] << 8);
+    case 0x040001AE: return NDSCart::ROMCommand[6] |
+                           (NDSCart::ROMCommand[7] << 8);
+
     case 0x040001C0: return SPI::Cnt;
     case 0x040001C2: return SPI::ReadData();
 
@@ -1882,14 +2001,11 @@ u16 ARM7IORead16(u32 addr)
     case 0x04000300: return PostFlag7;
     case 0x04000304: return PowerControl7;
     case 0x04000308: return ARM7BIOSProt;
-
-    case 0x04000504: return _soundbias;
     }
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
-        return 0;
+        return SPU::Read16(addr);
     }
 
     printf("unknown ARM7 IO read16 %08X %08X\n", addr, ARM9->R[15]);
@@ -1922,6 +2038,15 @@ u32 ARM7IORead32(u32 addr)
 
     case 0x040001A0: return NDSCart::SPICnt | (NDSCart::ReadSPIData() << 16);
     case 0x040001A4: return NDSCart::ROMCnt;
+
+    case 0x040001A8: return NDSCart::ROMCommand[0] |
+                           (NDSCart::ROMCommand[1] << 8) |
+                           (NDSCart::ROMCommand[2] << 16) |
+                           (NDSCart::ROMCommand[3] << 24);
+    case 0x040001AC: return NDSCart::ROMCommand[4] |
+                           (NDSCart::ROMCommand[5] << 8) |
+                           (NDSCart::ROMCommand[6] << 16) |
+                           (NDSCart::ROMCommand[7] << 24);
 
     case 0x040001C0:
         return SPI::Cnt | (SPI::ReadData() << 16);
@@ -1958,8 +2083,7 @@ u32 ARM7IORead32(u32 addr)
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
-        return 0;
+        return SPU::Read32(addr);
     }
 
     printf("unknown ARM7 IO read32 %08X\n", addr);
@@ -2017,7 +2141,7 @@ void ARM7IOWrite8(u32 addr, u8 val)
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
+        SPU::Write8(addr, val);
         return;
     }
 
@@ -2048,7 +2172,7 @@ void ARM7IOWrite16(u32 addr, u16 val)
     case 0x0400010C: Timers[7].Reload = val; return;
     case 0x0400010E: TimerStart(7, val); return;
 
-    case 0x04000134: return;printf("set debug port %04X %08X\n", val, ARM7Read32(ARM7->R[13]+4)); return;
+    case 0x04000134: /* TODO? */ return;
 
     case 0x04000138: RTC::Write(val, false); return;
 
@@ -2083,6 +2207,23 @@ void ARM7IOWrite16(u32 addr, u16 val)
         NDSCart::WriteSPIData(val & 0xFF);
         return;
 
+    case 0x040001A8:
+        NDSCart::ROMCommand[0] = val & 0xFF;
+        NDSCart::ROMCommand[1] = val >> 8;
+        return;
+    case 0x040001AA:
+        NDSCart::ROMCommand[2] = val & 0xFF;
+        NDSCart::ROMCommand[3] = val >> 8;
+        return;
+    case 0x040001AC:
+        NDSCart::ROMCommand[4] = val & 0xFF;
+        NDSCart::ROMCommand[5] = val >> 8;
+        return;
+    case 0x040001AE:
+        NDSCart::ROMCommand[6] = val & 0xFF;
+        NDSCart::ROMCommand[7] = val >> 8;
+        return;
+
     case 0x040001B8: ROMSeed0[12] = val & 0x7F; return;
     case 0x040001BA: ROMSeed1[12] = val & 0x7F; return;
 
@@ -2112,15 +2253,11 @@ void ARM7IOWrite16(u32 addr, u16 val)
         if (ARM7BIOSProt == 0)
             ARM7BIOSProt = val;
         return;
-
-    case 0x04000504: // removeme
-        _soundbias = val & 0x3FF;
-        return;
     }
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
+        SPU::Write16(addr, val);
         return;
     }
 
@@ -2187,6 +2324,19 @@ void ARM7IOWrite32(u32 addr, u32 val)
         if (ExMemCnt[0] & (1<<11)) NDSCart::WriteROMCnt(val);
         return;
 
+    case 0x040001A8:
+        NDSCart::ROMCommand[0] = val & 0xFF;
+        NDSCart::ROMCommand[1] = (val >> 8) & 0xFF;
+        NDSCart::ROMCommand[2] = (val >> 16) & 0xFF;
+        NDSCart::ROMCommand[3] = val >> 24;
+        return;
+    case 0x040001AC:
+        NDSCart::ROMCommand[4] = val & 0xFF;
+        NDSCart::ROMCommand[5] = (val >> 8) & 0xFF;
+        NDSCart::ROMCommand[6] = (val >> 16) & 0xFF;
+        NDSCart::ROMCommand[7] = val >> 24;
+        return;
+
     case 0x040001B0: *(u32*)&ROMSeed0[8] = val; return;
     case 0x040001B4: *(u32*)&ROMSeed1[8] = val; return;
 
@@ -2197,7 +2347,7 @@ void ARM7IOWrite32(u32 addr, u32 val)
 
     if (addr >= 0x04000400 && addr < 0x04000520)
     {
-        // sound I/O
+        SPU::Write32(addr, val);
         return;
     }
 
