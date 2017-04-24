@@ -14,5 +14,6 @@ SOURCES_CXX := $(CORE_DIR)/NDS.cpp \
 					$(CORE_DIR)/NDSCart.cpp \
 					$(CORE_DIR)/RTC.cpp \
 					$(CORE_DIR)/SPI.cpp \
+					$(CORE_DIR)/SPU.cpp \
 					$(CORE_DIR)/Wifi.cpp \
 					$(CORE_DIR)/libretro.cpp
