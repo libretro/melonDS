@@ -87,6 +87,7 @@ u16 PowerControl7;
 u16 ARM7BIOSProt;
 
 Timer Timers[8];
+u8 TimerCheckMask[2];
 
 DMA* DMAs[8];
 u32 DMA9Fill[4];
@@ -309,6 +310,8 @@ void Reset()
     CPUStop = 0;
 
     memset(Timers, 0, 8*sizeof(Timer));
+    TimerCheckMask[0] = 0;
+    TimerCheckMask[1] = 0;
 
     for (i = 0; i < 8; i++) DMAs[i]->Reset();
     memset(DMA9Fill, 0, 4*4);
@@ -629,8 +632,8 @@ void HandleTimerOverflow(u32 tid)
 void RunTimer(u32 tid, s32 cycles)
 {
     Timer* timer = &Timers[tid];
-    if ((timer->Cnt & 0x84) != 0x80)
-        return;
+    //if ((timer->Cnt & 0x84) != 0x80)
+    //    return;
 
     u32 oldcount = timer->Counter;
     timer->Counter += (cycles << timer->CycleShift);
@@ -640,10 +643,12 @@ void RunTimer(u32 tid, s32 cycles)
 
 void RunTimingCriticalDevices(u32 cpu, s32 cycles)
 {
-    RunTimer((cpu<<2)+0, cycles);
-    RunTimer((cpu<<2)+1, cycles);
-    RunTimer((cpu<<2)+2, cycles);
-    RunTimer((cpu<<2)+3, cycles);
+    register u32 timermask = TimerCheckMask[cpu];
+
+    if (timermask & 0x1) RunTimer((cpu<<2)+0, cycles);
+    if (timermask & 0x2) RunTimer((cpu<<2)+1, cycles);
+    if (timermask & 0x4) RunTimer((cpu<<2)+2, cycles);
+    if (timermask & 0x8) RunTimer((cpu<<2)+3, cycles);
 
     if (cpu == 0)
     {
@@ -696,6 +701,11 @@ void TimerStart(u32 id, u16 cnt)
     {
         timer->Counter = timer->Reload << 16;
     }
+
+    if ((cnt & 0x84) == 0x80)
+        TimerCheckMask[id>>2] |= (1<<(id&0x3));
+    else
+        TimerCheckMask[id>>2] &= ~(1<<(id&0x3));
 }
 
 
