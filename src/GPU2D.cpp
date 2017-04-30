@@ -608,8 +608,8 @@ void GPU2D::DoCapture(u32 line, u32 width, u32* src)
     case 2: // sources A+B
     case 3:
         {
-            u32 eva = DispCnt & 0x1F;
-            u32 evb = (DispCnt >> 8) & 0x1F;
+            u32 eva = CaptureCnt & 0x1F;
+            u32 evb = (CaptureCnt >> 8) & 0x1F;
 
             // checkme
             if (eva > 16) eva = 16;
@@ -639,6 +639,10 @@ void GPU2D::DoCapture(u32 line, u32 width, u32* src)
                     u32 gD = ((gA * aA * eva) + (gB * aB * evb)) >> 4;
                     u32 bD = ((bA * aA * eva) + (bB * aB * evb)) >> 4;
                     u32 aD = (eva>0 ? aA : 0) | (evb>0 ? aB : 0);
+
+                    if (rD > 0x1F) rD = 0x1F;
+                    if (gD > 0x1F) gD = 0x1F;
+                    if (bD > 0x1F) bD = 0x1F;
 
                     dst[dstaddr] = rD | (gD << 5) | (bD << 10) | (aD << 15);
                     srcBaddr = (srcBaddr + 1) & 0xFFFF;
@@ -1855,21 +1859,44 @@ void GPU2D::DrawSprite_Normal(u16* attrib, u32 width, s32 xpos, u32 ypos, u32* d
         }
 
         u32 pixelsaddr = (Num ? 0x06600000 : 0x06400000) + tilenum;
-        pixelsaddr += (xoff << 1);
 
-        for (; xoff < xend;)
+        if (attrib[1] & 0x1000)
         {
-            u16 color = GPU::ReadVRAM_OBJ<u16>(pixelsaddr);
-            pixelsaddr += 2;
+            pixelsaddr += ((width-1 - xoff) << 1);
 
-            if (color & 0x8000)
+            for (; xoff < xend;)
             {
-                if (window) ((u8*)dst)[xpos] = 1;
-                else        dst[xpos] = color | prio;
-            }
+                u16 color = GPU::ReadVRAM_OBJ<u16>(pixelsaddr);
+                pixelsaddr -= 2;
 
-            xoff++;
-            xpos++;
+                if (color & 0x8000)
+                {
+                    if (window) ((u8*)dst)[xpos] = 1;
+                    else        dst[xpos] = color | prio;
+                }
+
+                xoff++;
+                xpos++;
+            }
+        }
+        else
+        {
+            pixelsaddr += (xoff << 1);
+
+            for (; xoff < xend;)
+            {
+                u16 color = GPU::ReadVRAM_OBJ<u16>(pixelsaddr);
+                pixelsaddr += 2;
+
+                if (color & 0x8000)
+                {
+                    if (window) ((u8*)dst)[xpos] = 1;
+                    else        dst[xpos] = color | prio;
+                }
+
+                xoff++;
+                xpos++;
+            }
         }
     }
     else

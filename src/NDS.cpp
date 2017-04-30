@@ -222,6 +222,9 @@ void SetupDirectBoot()
     ARM9->JumpTo(bootparams[1]);
     ARM7->JumpTo(bootparams[5]);
 
+    PostFlag9 = 0x01;
+    PostFlag7 = 0x01;
+
     PowerControl9 = 0x820F;
     GPU::DisplaySwap(PowerControl9);
 
@@ -841,6 +844,14 @@ void debug(u32 param)
 
     //for (int i = 0; i < 9; i++)
     //    printf("VRAM %c: %02X\n", 'A'+i, GPU::VRAMCNT[i]);
+
+    /*FILE* shit = fopen("debug/poke7.bin", "wb");
+    for (u32 i = 0x02000000; i < 0x03810000; i+=4)
+    {
+        u32 val = ARM7Read32(i);
+        fwrite(&val, 4, 1, shit);
+    }
+    fclose(shit);*/
 }
 
 
@@ -935,7 +946,7 @@ u16 ARM9Read16(u32 addr)
         return 0xFFFF;
     }
 
-    //printf("unknown arm9 read16 %08X %08X %08X %08X\n", addr, ARM9->R[15], ARM9->R[1], ARM9->R[2]);
+    //printf("unknown arm9 read16 %08X %08X\n", addr, ARM9->R[15]);
     return 0;
 }
 
@@ -1647,6 +1658,15 @@ void ARM9IOWrite16(u32 addr, u16 val)
     case 0x040000DC: DMAs[3]->WriteCnt((DMAs[3]->Cnt & 0xFFFF0000) | val); return;
     case 0x040000DE: DMAs[3]->WriteCnt((DMAs[3]->Cnt & 0x0000FFFF) | (val << 16)); return;
 
+    case 0x040000E0: DMA9Fill[0] = (DMA9Fill[0] & 0xFFFF0000) | val; return;
+    case 0x040000E2: DMA9Fill[0] = (DMA9Fill[0] & 0x0000FFFF) | (val << 16); return;
+    case 0x040000E4: DMA9Fill[1] = (DMA9Fill[1] & 0xFFFF0000) | val; return;
+    case 0x040000E6: DMA9Fill[1] = (DMA9Fill[1] & 0x0000FFFF) | (val << 16); return;
+    case 0x040000E8: DMA9Fill[2] = (DMA9Fill[2] & 0xFFFF0000) | val; return;
+    case 0x040000EA: DMA9Fill[2] = (DMA9Fill[2] & 0x0000FFFF) | (val << 16); return;
+    case 0x040000EC: DMA9Fill[3] = (DMA9Fill[3] & 0xFFFF0000) | val; return;
+    case 0x040000EE: DMA9Fill[3] = (DMA9Fill[3] & 0x0000FFFF) | (val << 16); return;
+
     case 0x04000100: Timers[0].Reload = val; return;
     case 0x04000102: TimerStart(0, val); return;
     case 0x04000104: Timers[1].Reload = val; return;
@@ -1872,6 +1892,10 @@ void ARM9IOWrite32(u32 addr, u32 val)
         GPU::MapVRAM_H(7, val & 0xFF);
         GPU::MapVRAM_I(8, (val >> 8) & 0xFF);
         return;
+
+    case 0x04000280: DivCnt = val; StartDiv(); return;
+
+    case 0x040002B0: SqrtCnt = val; StartSqrt(); return;
 
     case 0x04000290: DivNumerator[0] = val; StartDiv(); return;
     case 0x04000294: DivNumerator[1] = val; StartDiv(); return;
