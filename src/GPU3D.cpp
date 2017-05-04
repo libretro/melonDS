@@ -610,6 +610,8 @@ void SubmitPolygon()
     int prev, next;
 
     // culling
+    // TODO: work out how it works on the real thing
+    // the normalization part is a wild guess
 
     Vertex *v0, *v1, *v2;
     s64 normalX, normalY, normalZ;
@@ -618,9 +620,19 @@ void SubmitPolygon()
     v0 = &TempVertexBuffer[0];
     v1 = &TempVertexBuffer[1];
     v2 = &TempVertexBuffer[2];
-    normalX = (((s64)v0->Position[1] * v2->Position[3]) - ((s64)v0->Position[3] * v2->Position[1])) >> 12;
-    normalY = (((s64)v0->Position[3] * v2->Position[0]) - ((s64)v0->Position[0] * v2->Position[3])) >> 12;
-    normalZ = (((s64)v0->Position[0] * v2->Position[1]) - ((s64)v0->Position[1] * v2->Position[0])) >> 12;
+    normalX = ((s64)v0->Position[1] * v2->Position[3]) - ((s64)v0->Position[3] * v2->Position[1]);
+    normalY = ((s64)v0->Position[3] * v2->Position[0]) - ((s64)v0->Position[0] * v2->Position[3]);
+    normalZ = ((s64)v0->Position[0] * v2->Position[1]) - ((s64)v0->Position[1] * v2->Position[0]);
+
+    while ((((normalX>>31) ^ (normalX>>63)) != 0) ||
+           (((normalY>>31) ^ (normalY>>63)) != 0) ||
+           (((normalZ>>31) ^ (normalZ>>63)) != 0))
+    {
+        normalX >>= 4;
+        normalY >>= 4;
+        normalZ >>= 4;
+    }
+
     dot = ((s64)v1->Position[0] * normalX) + ((s64)v1->Position[1] * normalY) + ((s64)v1->Position[3] * normalZ);
 
     bool facingview = (dot < 0);
@@ -807,6 +819,7 @@ void SubmitPolygon()
     // determine bounds of the polygon
     // also determine the W shift and normalize W
     // TODO: normalization works both ways
+    // (ie two W's that span 12 bits or less will be brought to 16 bits)
 
     u32 vtop = 0, vbot = 0;
     s32 ytop = 192, ybot = 0;
@@ -963,10 +976,6 @@ void SubmitVertex()
 
 s32 CalculateLighting()
 {
-    // TODO: this requires matrix mode 2, apparently
-    // hardware seems to read garbage when matrix mode isn't 2
-    // also, non-normal normals seem to be treated as zero? or overflow to negative?
-
     if ((TexParam >> 30) == 2)
     {
         TexCoords[0] = RawTexCoords[0] + (((s64)Normal[0]*TexMatrix[0] + (s64)Normal[1]*TexMatrix[4] + (s64)Normal[2]*TexMatrix[8]) >> 21);
@@ -988,6 +997,11 @@ s32 CalculateLighting()
         if (!(CurPolygonAttr & (1<<i)))
             continue;
 
+        // overflow handling (for example, if the normal length is >1)
+        // according to some hardware tests
+        // * diffuse level is saturated to 255
+        // * shininess level mirrors back to 0 and is ANDed with 0xFF, that before being squared
+
         s32 difflevel = (-(LightDirection[i][0]*normaltrans[0] +
                          LightDirection[i][1]*normaltrans[1] +
                          LightDirection[i][2]*normaltrans[2])) >> 10;
@@ -998,9 +1012,9 @@ s32 CalculateLighting()
                           (LightDirection[i][1]>>1)*normaltrans[1] +
                           ((LightDirection[i][2]-0x200)>>1)*normaltrans[2]) >> 10);
         if (shinelevel < 0) shinelevel = 0;
+        else if (shinelevel > 255) shinelevel = (0x100 - shinelevel) & 0xFF;
         shinelevel = ((shinelevel * shinelevel) >> 7) - 0x100; // really (2*shinelevel*shinelevel)-1
         if (shinelevel < 0) shinelevel = 0;
-        else if (shinelevel > 255) shinelevel = 255;
 
         if (UseShininessTable)
         {
@@ -1142,7 +1156,6 @@ void PosTest()
 
 void VecTest(u32* params)
 {
-    // TODO: apparently requires matrix mode 2
     // TODO: maybe it overwrites the normal registers, too
 
     s16 normal[3];
