@@ -23,6 +23,7 @@ static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
 char retro_base_directory[4096];
 char retro_game_path[4096];
+bool retro_firmware_status;
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -240,7 +241,10 @@ bool retro_load_game(const struct retro_game_info *info)
    check_variables();
 
    (void)info;
-   return true;
+   if (!retro_firmware_status)
+      return false;
+   else
+      return true;
 }
 
 void retro_unload_game(void)

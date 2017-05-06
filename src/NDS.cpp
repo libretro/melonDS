@@ -33,6 +33,7 @@
 #ifdef __LIBRETRO__
 extern char retro_base_directory[4096];
 extern char retro_game_path[4096];
+extern bool retro_firmware_status;
 #endif
 
 namespace NDS
@@ -244,6 +245,7 @@ void Reset()
     char path[2048];
     snprintf(path, sizeof(path), "%s/bios9.bin", retro_base_directory);
     f = fopen(path, "rb");
+    f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #else
     f = fopen("bios9.bin", "rb");
 #endif
@@ -261,6 +263,7 @@ void Reset()
 #ifdef __LIBRETRO__
     snprintf(path, sizeof(path), "%s/bios7.bin", retro_base_directory);
     f = fopen(path, "rb");
+    f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #else
     f = fopen("bios7.bin", "rb");
 #endif
