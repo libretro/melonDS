@@ -18,6 +18,104 @@
 #define VIDEO_HEIGHT 384
 #define VIDEO_PIXELS VIDEO_WIDTH * VIDEO_HEIGHT
 
+#ifdef HAVE_THREADS
+/*  Code taken from http://greenteapress.com/semaphores/semaphore.c
+ *  and changed to use libretro-common's mutexes and conditions.
+ */
+
+#include <stdlib.h>
+
+#include <rthreads/rthreads.h>
+
+typedef struct ssem ssem_t;
+
+struct ssem
+{
+   int value;
+   int wakeups;
+   slock_t *mutex;
+   scond_t *cond;
+};
+
+ssem_t *ssem_new(int value)
+{
+   ssem_t *semaphore = (ssem_t*)calloc(1, sizeof(*semaphore));
+
+   if (!semaphore)
+      goto error;
+   
+   semaphore->value   = value;
+   semaphore->wakeups = 0;
+   semaphore->mutex   = slock_new();
+
+   if (!semaphore->mutex)
+      goto error;
+
+   semaphore->cond = scond_new();
+
+   if (!semaphore->cond)
+      goto error;
+
+   return semaphore;
+
+error:
+   if (semaphore->mutex)
+      slock_free(semaphore->mutex);
+   semaphore->mutex = NULL;
+   if (semaphore)
+      free((void*)semaphore);
+   return NULL;
+}
+
+void ssem_free(ssem_t *semaphore)
+{
+   if (!semaphore)
+      return;
+
+   scond_free(semaphore->cond);
+   slock_free(semaphore->mutex);
+   free((void*)semaphore);
+}
+
+void ssem_wait(ssem_t *semaphore)
+{
+   if (!semaphore)
+      return;
+
+   slock_lock(semaphore->mutex);
+   semaphore->value--;
+
+   if (semaphore->value < 0)
+   {
+      do
+      {
+         scond_wait(semaphore->cond, semaphore->mutex);
+      }while (semaphore->wakeups < 1);
+
+      semaphore->wakeups--;
+   }
+
+   slock_unlock(semaphore->mutex);
+}
+
+void ssem_signal(ssem_t *semaphore)
+{
+   if (!semaphore)
+      return;
+
+   slock_lock(semaphore->mutex);
+   semaphore->value++;
+
+   if (semaphore->value <= 0)
+   {
+      semaphore->wakeups++;
+      scond_signal(semaphore->cond);
+   }
+
+   slock_unlock(semaphore->mutex);
+}
+#endif
+
 static uint8_t *frame_buf;
 static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
@@ -87,22 +185,34 @@ void Semaphore_Reset(void *sema)
 
 void Semaphore_Post(void *sema)
 {
-   /* TODO/FIXME */
+#ifdef HAVE_THREADS
+   ssem_signal((ssem_t*)sema);
+#endif
 }
 
 void Semaphore_Wait(void *sema)
 {
-   /* TODO/FIXME */
+#ifdef HAVE_THREADS
+   ssem_wait((ssem_t*)sema);
+#endif
 }
 
 void Semaphore_Free(void *sema)
 {
-   /* TODO/FIXME */
+#ifdef HAVE_THREADS
+   ssem_t *sem = (ssem_t*)sema;
+   if (sem)
+      ssem_free(sem);
+#endif
 }
 
 void *Semaphore_Create()
 {
-   /* TODO/FIXME */
+#ifdef HAVE_THREADS
+   ssem_t *sem = ssem_new(0);
+   if (sem)
+      return sem;
+#endif
    return NULL;
 }
 
