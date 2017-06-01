@@ -89,12 +89,15 @@ void Reset()
 
     PrevIsShadowMask = false;
 
+    /* TODO/FIXME - Libretro - turn this off for now */
+#if 0
     // TODO: make it configurable
     if (!RenderThreadRunning)
     {
         RenderThreadRunning = true;
         RenderThread = Platform::Thread_Create(RenderThreadFunc);
     }
+#endif
 
     if (RenderThreadRendering)
         Platform::Semaphore_Wait(Sema_RenderDone);

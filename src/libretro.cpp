@@ -77,6 +77,76 @@ static retro_audio_sample_batch_t audio_cb;
 static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
 
+namespace Platform
+{
+
+void Semaphore_Reset(void *sema)
+{
+   /* TODO/FIXME */
+}
+
+void Semaphore_Post(void *sema)
+{
+   /* TODO/FIXME */
+}
+
+void Semaphore_Wait(void *sema)
+{
+   /* TODO/FIXME */
+}
+
+void Semaphore_Free(void *sema)
+{
+   /* TODO/FIXME */
+}
+
+void *Semaphore_Create()
+{
+   /* TODO/FIXME */
+   return NULL;
+}
+
+void Thread_Free(void *thread)
+{
+   /* TODO/FIXME */
+}
+
+void *Thread_Create(void (*func)())
+{
+   /* TODO/FIXME */
+   return NULL;
+}
+
+void Thread_Wait(void *thread)
+{
+   /* TODO/FIXME */
+}
+
+int MP_SendPacket(u8 *data, int len)
+{
+   /* TODO/FIXME */
+   return 0;
+}
+
+int MP_RecvPacket(u8 *data, bool block)
+{
+   /* TODO/FIXME */
+   return 0;
+}
+
+void MP_DeInit()
+{
+   /* TODO/FIXME */
+}
+
+bool MP_Init()
+{
+   /* TODO/FIXME */
+   return true;
+}
+
+};
+
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    info->timing.fps            = 32.0f * 1024.0f * 1024.0f / 560190.0f;
