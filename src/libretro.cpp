@@ -185,33 +185,41 @@ void Semaphore_Reset(void *sema)
 
 void Semaphore_Post(void *sema)
 {
+#if 0
 #ifdef HAVE_THREADS
    ssem_signal((ssem_t*)sema);
+#endif
 #endif
 }
 
 void Semaphore_Wait(void *sema)
 {
+#if 0
 #ifdef HAVE_THREADS
    ssem_wait((ssem_t*)sema);
+#endif
 #endif
 }
 
 void Semaphore_Free(void *sema)
 {
+#if 0
 #ifdef HAVE_THREADS
    ssem_t *sem = (ssem_t*)sema;
    if (sem)
       ssem_free(sem);
 #endif
+#endif
 }
 
 void *Semaphore_Create()
 {
+#if 0
 #ifdef HAVE_THREADS
    ssem_t *sem = ssem_new(0);
    if (sem)
       return sem;
+#endif
 #endif
    return NULL;
 }
