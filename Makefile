@@ -33,6 +33,7 @@ endif
 CORE_DIR    += .
 TARGET_NAME := melonds
 LIBM		    = -lm
+LIBTHREAD   :=
 
 ifeq ($(ARCHFLAGS),)
 ifeq ($(archs),ppc)
@@ -58,19 +59,23 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+	LIBTHREAD=-lpthread
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T
 	LIBM :=
+	LIBTHREAD=-lpthread
 else ifneq (,$(findstring osx,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
+	LIBTHREAD=-lpthread
 else ifneq (,$(findstring ios,$(platform)))
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
 	fpic := -fPIC
 	SHARED := -dynamiclib
+	LIBTHREAD=-lpthread
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
@@ -89,6 +94,7 @@ else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+	LIBTHREAD=-lpthread
 else ifeq ($(platform), emscripten)
    TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
@@ -105,7 +111,7 @@ else
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
 endif
 
-LDFLAGS += $(LIBM)
+LDFLAGS += $(LIBM) $(LIBTHREAD)
 
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g
@@ -117,8 +123,8 @@ include Makefile.common
 
 OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 
-CFLAGS   += -Wall -D__LIBRETRO__ $(fpic)
-CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic)
+CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
+CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
 
 all: $(TARGET)
 
