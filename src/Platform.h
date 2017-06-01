@@ -16,27 +16,29 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef PLATFORM_H
+#define PLATFORM_H
 
 #include "types.h"
 
-namespace Config
+namespace Platform
 {
 
-void Load();
-void Save();
+void* Thread_Create(void (*func)());
+void Thread_Free(void* thread);
+void Thread_Wait(void* thread);
 
-extern int KeyMapping[12];
-extern int JoyMapping[12];
+void* Semaphore_Create();
+void Semaphore_Free(void* sema);
+void Semaphore_Reset(void* sema);
+void Semaphore_Wait(void* sema);
+void Semaphore_Post(void* sema);
 
-extern int WindowWidth;
-extern int WindowHeight;
-
-extern int DirectBoot;
-
-extern int Threaded3D;
+bool MP_Init();
+void MP_DeInit();
+int MP_SendPacket(u8* data, int len);
+int MP_RecvPacket(u8* data, bool block);
 
 }
 
-#endif // CONFIG_H
+#endif // PLATFORM_H

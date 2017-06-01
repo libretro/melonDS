@@ -33,6 +33,8 @@ wxIMPLEMENT_APP_NO_MAIN(wxApp_melonDS);
 
 int main(int argc, char** argv)
 {
+    srand(time(NULL));
+
     // http://stackoverflow.com/questions/14543333/joystick-wont-work-using-sdl
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
@@ -324,6 +326,8 @@ wxThread::ExitCode EmuThread::Entry()
     emustatus = 3;
     emupaused = false;
 
+    limitfps = true;
+
     sdlwin = SDL_CreateWindow("melonDS " MELONDS_VERSION,
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               Config::WindowWidth, Config::WindowHeight,
@@ -371,7 +375,9 @@ wxThread::ExitCode EmuThread::Entry()
     axismask = 0;
 
     u32 nframes = 0;
-    u32 lasttick = SDL_GetTicks();
+    u32 starttick = SDL_GetTicks();
+    u32 lasttick = starttick;
+    u32 lastmeasuretick = lasttick;
     u32 fpslimitcount = 0;
 
     for (;;)
@@ -384,9 +390,7 @@ wxThread::ExitCode EmuThread::Entry()
 
         if (emustatus == 1)
         {
-            u32 starttick = SDL_GetTicks();
-
-            NDS::RunFrame();
+            u32 nlines = NDS::RunFrame();
 
             SDL_LockTexture(sdltex, NULL, &texpixels, &texstride);
             if (texstride == 256*4)
@@ -409,21 +413,33 @@ wxThread::ExitCode EmuThread::Entry()
             SDL_RenderCopy(sdlrend, sdltex, &botsrc, &botdst);
             SDL_RenderPresent(sdlrend);
 
-            fpslimitcount++;
-            if (fpslimitcount >= 3) fpslimitcount = 0;
-            u32 frametime = (fpslimitcount == 0) ? 16 : 17;
+            // framerate limiter based off SDL2_gfx
+            float framerate;
+            if (nlines == 263) framerate = 1000.0f / 60.0f;
+            else               framerate = ((1000.0f * nlines) / 263.0f) / 60.0f;
 
-            u32 endtick = SDL_GetTicks();
-            u32 diff = endtick - starttick;
-            if (diff < frametime)
-                Sleep(frametime - diff);
+            fpslimitcount++;
+            u32 curtick = SDL_GetTicks();
+            u32 delay = curtick - lasttick;
+            lasttick = curtick;
+
+            u32 wantedtick = starttick + (u32)((float)fpslimitcount * framerate);
+            if (curtick < wantedtick && limitfps)
+            {
+                Sleep(wantedtick - curtick);
+            }
+            else
+            {
+                fpslimitcount = 0;
+                starttick = curtick;
+            }
 
             nframes++;
             if (nframes >= 30)
             {
                 u32 tick = SDL_GetTicks();
-                u32 diff = tick - lasttick;
-                lasttick = tick;
+                u32 diff = tick - lastmeasuretick;
+                lastmeasuretick = tick;
 
                 u32 fps = (nframes * 1000) / diff;
                 nframes = 0;
@@ -437,6 +453,8 @@ wxThread::ExitCode EmuThread::Entry()
         {
             nframes = 0;
             lasttick = SDL_GetTicks();
+            starttick = lasttick;
+            lastmeasuretick = lasttick;
             fpslimitcount = 0;
 
             Sleep(50);
@@ -555,6 +573,7 @@ void EmuThread::ProcessEvents()
             if (evt.key.keysym.scancode == Config::KeyMapping[10]) NDS::PressKey(16);
             if (evt.key.keysym.scancode == Config::KeyMapping[11]) NDS::PressKey(17);
             if (evt.key.keysym.scancode == SDL_SCANCODE_F12) NDS::debug(0);
+            if (evt.key.keysym.scancode == SDL_SCANCODE_TAB) limitfps = !limitfps;
             break;
 
         case SDL_KEYUP:
@@ -563,6 +582,7 @@ void EmuThread::ProcessEvents()
                 if (evt.key.keysym.scancode == Config::KeyMapping[i]) NDS::ReleaseKey(i);
             if (evt.key.keysym.scancode == Config::KeyMapping[10]) NDS::ReleaseKey(16);
             if (evt.key.keysym.scancode == Config::KeyMapping[11]) NDS::ReleaseKey(17);
+            //if (evt.key.keysym.scancode == SDL_SCANCODE_TAB) limitfps = true;
             break;
 
         case SDL_JOYBUTTONDOWN:

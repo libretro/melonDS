@@ -135,6 +135,7 @@ bool Init()
     if (!SPU::Init()) return false;
     if (!SPI::Init()) return false;
     if (!RTC::Init()) return false;
+    if (!Wifi::Init()) return false;
 
     return true;
 }
@@ -155,6 +156,7 @@ void DeInit()
     SPU::DeInit();
     SPI::DeInit();
     RTC::DeInit();
+    Wifi::DeInit();
 }
 
 
@@ -250,7 +252,12 @@ void Reset()
     f = fopen("bios9.bin", "rb");
 #endif
     if (!f)
+    {
         printf("ARM9 BIOS not found\n");
+
+        for (i = 0; i < 16; i++)
+            ((u32*)ARM9BIOS)[i] = 0xE7FFDEFF;
+    }
     else
     {
         fseek(f, 0, SEEK_SET);
@@ -268,7 +275,12 @@ void Reset()
     f = fopen("bios7.bin", "rb");
 #endif
     if (!f)
+    {
         printf("ARM7 BIOS not found\n");
+
+        for (i = 0; i < 16; i++)
+            ((u32*)ARM7BIOS)[i] = 0xE7FFDEFF;
+    }
     else
     {
         fseek(f, 0, SEEK_SET);
@@ -388,16 +400,14 @@ void RunSystem(s32 cycles)
     }
 }
 
-void RunFrame()
+u32 RunFrame()
 {
-    s32 framecycles = 560190;
-
-    if (!Running) return; // dorp
+    if (!Running) return 263; // dorp
 
 
     GPU::StartFrame();
 
-    while (Running && framecycles>0)
+    while (Running && GPU::TotalScanlines==0)
     {
         s32 ndscyclestorun;
         s32 ndscycles = 0;
@@ -438,21 +448,9 @@ void RunFrame()
 
         RunSystem(ndscyclestorun);
         //GPU3D::Run(ndscyclestorun);
-
-        /*while (ndscycles < ndscyclestorun)
-        {
-            ARM7->CyclesToRun = ndscyclestorun - ndscycles - ARM7Offset;
-            ARM7->Execute();
-            ARM7Offset = 0;
-
-            RunEvents(ARM7->Cycles);
-            ndscycles += ARM7->Cycles;
-        }
-
-        ARM7Offset = ndscycles - ndscyclestorun;*/
-
-        framecycles -= ndscyclestorun;
     }
+
+    return GPU::TotalScanlines;
 }
 
 void Reschedule()
@@ -850,6 +848,14 @@ void debug(u32 param)
 
     /*FILE* shit = fopen("debug/poke7.bin", "wb");
     for (u32 i = 0x02000000; i < 0x03810000; i+=4)
+    {
+        u32 val = ARM7Read32(i);
+        fwrite(&val, 4, 1, shit);
+    }
+    fclose(shit);*/
+    /*FILE*
+    shit = fopen("debug/pictochat7.bin", "wb");
+    for (u32 i = 0x037F0000; i < 0x03810000; i+=4)
     {
         u32 val = ARM7Read32(i);
         fwrite(&val, 4, 1, shit);
@@ -1657,6 +1663,7 @@ void ARM9IOWrite16(u32 addr, u16 val)
     switch (addr)
     {
     case 0x04000004: GPU::SetDispStat(0, val); return;
+    case 0x04000006: GPU::SetVCount(val); return;
 
     case 0x04000060: GPU3D::Write16(addr, val); return;
 
@@ -2198,6 +2205,7 @@ void ARM7IOWrite16(u32 addr, u16 val)
     switch (addr)
     {
     case 0x04000004: GPU::SetDispStat(1, val); return;
+    case 0x04000006: GPU::SetVCount(val); return;
 
     case 0x040000B8: DMAs[4]->WriteCnt((DMAs[4]->Cnt & 0xFFFF0000) | val); return;
     case 0x040000BA: DMAs[4]->WriteCnt((DMAs[4]->Cnt & 0x0000FFFF) | (val << 16)); return;

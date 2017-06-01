@@ -57,7 +57,8 @@ typedef struct
 
     bool IsShadowMask;
     bool IsShadow;
-    bool ClearStencil;
+
+    // data below rather specific to the software renderer
 
     u32 VTop, VBottom; // vertex indices
     s32 YTop, YBottom; // Y coords
@@ -65,12 +66,20 @@ typedef struct
 
 } Polygon;
 
-extern u32 DispCnt;
-extern u8 AlphaRef;
-extern s32 Viewport[4];
+extern u32 RenderDispCnt;
+extern u8 RenderAlphaRef;
+
+extern u16 RenderToonTable[32];
+extern u16 RenderEdgeTable[8];
+
+extern u32 RenderFogColor, RenderFogOffset;
+extern u8 RenderFogDensityTable[34];
+
 extern u32 RenderClearAttr1, RenderClearAttr2;
 
-extern u16 ToonTable[32];
+extern Vertex* RenderVertexRAM;
+extern Polygon* RenderPolygonRAM;
+extern u32 RenderNumPolygons;
 
 bool Init();
 void DeInit();
@@ -82,8 +91,10 @@ void Run(s32 cycles);
 void CheckFIFOIRQ();
 void CheckFIFODMA();
 
+void VCount144();
 void VBlank();
 void VCount215();
+void RequestLine(int line);
 u32* GetLine(int line);
 
 void WriteToGXFIFO(u32 val);
@@ -102,7 +113,9 @@ bool Init();
 void DeInit();
 void Reset();
 
+void VCount144();
 void RenderFrame(Vertex* vertices, Polygon* polygons, int npolys);
+void RequestLine(int line);
 u32* GetLine(int line);
 
 }

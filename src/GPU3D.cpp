@@ -60,7 +60,16 @@
 //
 // viewport Y coordinates are upside-down
 //
-// clear color/depth/bitmap/etc registers (04000350/04000354) are double-buffered
+// several registers are latched upon VBlank, the renderer uses the latched registers
+// latched registers include:
+// DISP3DCNT
+// alpha test ref value
+// fog color, offset, density table
+// toon table
+// edge table
+// clear attributes
+//
+// TODO: check how DISP_1DOT_DEPTH works and whether it's latched
 
 
 namespace GPU3D
@@ -153,15 +162,26 @@ FIFO<CmdFIFOEntry>* CmdPIPE;
 u32 NumCommands, CurCommand, ParamCount, TotalParams;
 
 u32 DispCnt;
-u8 AlphaRefVal;
-u8 AlphaRef;
+u8 AlphaRefVal, AlphaRef;
 
 u16 ToonTable[32];
 u16 EdgeTable[8];
 
-u32 FogColor;
-u32 FogOffset;
+u32 FogColor, FogOffset;
 u8 FogDensityTable[32];
+
+u32 ClearAttr1, ClearAttr2;
+
+u32 RenderDispCnt;
+u8 RenderAlphaRef;
+
+u16 RenderToonTable[32];
+u16 RenderEdgeTable[8];
+
+u32 RenderFogColor, RenderFogOffset;
+u8 RenderFogDensityTable[34];
+
+u32 RenderClearAttr1, RenderClearAttr2;
 
 u32 GXStat;
 
@@ -240,9 +260,6 @@ u32 CurRAMBank;
 Vertex* RenderVertexRAM;
 Polygon* RenderPolygonRAM;
 u32 RenderNumPolygons;
-
-u32 ClearAttr1, ClearAttr2;
-u32 RenderClearAttr1, RenderClearAttr2;
 
 u32 FlushRequest;
 u32 FlushAttributes;
@@ -734,11 +751,6 @@ void SubmitPolygon()
     poly->Translucent = ((texfmt == 1 || texfmt == 6) && !(CurPolygonAttr & 0x10)) || (polyalpha > 0 && polyalpha < 31);
 
     poly->IsShadowMask = ((CurPolygonAttr & 0x3F000030) == 0x00000030);
-    if ((NumPolygons == 1) || (!CurPolygonRAM[NumPolygons-2].IsShadowMask))
-        poly->ClearStencil = poly->IsShadowMask;
-    else
-        poly->ClearStencil = false;
-
     poly->IsShadow = ((CurPolygonAttr & 0x30) == 0x30) && !poly->IsShadowMask;
 
     if (LastStripPolygon && clipstart > 0)
@@ -884,8 +896,6 @@ void SubmitVertex()
     s64 vertex[4] = {(s64)CurVertex[0], (s64)CurVertex[1], (s64)CurVertex[2], 0x1000};
     Vertex* vertextrans = &TempVertexBuffer[VertexNumInPoly];
 
-    //printf("vertex: %08X %08X %08X, %d %d %d\n", CurVertex[0], CurVertex[1], CurVertex[2], VertexColor[0], VertexColor[1], VertexColor[2]);
-
     UpdateClipMatrix();
     vertextrans->Position[0] = (vertex[0]*ClipMatrix[0] + vertex[1]*ClipMatrix[4] + vertex[2]*ClipMatrix[8] + vertex[3]*ClipMatrix[12]) >> 12;
     vertextrans->Position[1] = (vertex[0]*ClipMatrix[1] + vertex[1]*ClipMatrix[5] + vertex[2]*ClipMatrix[9] + vertex[3]*ClipMatrix[13]) >> 12;
@@ -1001,6 +1011,7 @@ s32 CalculateLighting()
         // according to some hardware tests
         // * diffuse level is saturated to 255
         // * shininess level mirrors back to 0 and is ANDed with 0xFF, that before being squared
+        // TODO: check how it behaves when the computed shininess is >=0x200
 
         s32 difflevel = (-(LightDirection[i][0]*normaltrans[0] +
                          LightDirection[i][1]*normaltrans[1] +
@@ -1780,7 +1791,12 @@ void CheckFIFODMA()
         NDS::CheckDMAs(0, 0x07);
 }
 
+void VCount144()
+{
+    SoftRenderer::VCount144();
+}
 
+int frame=0;
 void VBlank()
 {
     if (FlushRequest & 0x1)
@@ -1789,7 +1805,18 @@ void VBlank()
         RenderPolygonRAM = CurPolygonRAM;
         RenderNumPolygons = NumPolygons;
 
-        // TODO: find out which other registers are latched for rendering
+        RenderDispCnt = DispCnt;
+        RenderAlphaRef = AlphaRef;
+
+        memcpy(RenderEdgeTable, EdgeTable, 8*2);
+        memcpy(RenderToonTable, ToonTable, 32*2);
+
+        RenderFogColor = FogColor;
+        RenderFogOffset = FogOffset;
+        RenderFogDensityTable[0] = FogDensityTable[0];
+        memcpy(&RenderFogDensityTable[1], FogDensityTable, 32);
+        RenderFogDensityTable[33] = FogDensityTable[31];
+
         RenderClearAttr1 = ClearAttr1;
         RenderClearAttr2 = ClearAttr2;
 
@@ -1801,7 +1828,7 @@ void VBlank()
         NumPolygons = 0;
 
         FlushRequest &= ~0x1;
-        FlushRequest |= 0x2;
+        FlushRequest |= 0x2;frame=1;
     }
 }
 
@@ -1810,12 +1837,17 @@ void VCount215()
     // TODO: detect other conditions that could require rerendering
     // the DS is said to present new 3D frames all the time, even if no commands are sent
 
-    if (FlushRequest & 0x2)
+    //if (FlushRequest & 0x2)
     {
         SoftRenderer::RenderFrame(RenderVertexRAM, RenderPolygonRAM, RenderNumPolygons);
 
         FlushRequest &= ~0x2;
     }
+}
+
+void RequestLine(int line)
+{
+    return SoftRenderer::RequestLine(line);
 }
 
 u32* GetLine(int line)
@@ -1956,7 +1988,7 @@ void Write8(u32 addr, u8 val)
 
     if (addr >= 0x04000360 && addr < 0x04000380)
     {
-        FogDensityTable[addr - 0x04000360] = val;
+        FogDensityTable[addr - 0x04000360] = val & 0x7F;
         return;
     }
 
@@ -1999,7 +2031,7 @@ void Write16(u32 addr, u16 val)
         FogColor = (FogColor & 0xFFFF) | (val << 16);
         return;
     case 0x0400035C:
-        FogOffset = val;
+        FogOffset = val & 0x7FFF;
         return;
     }
 
@@ -2012,8 +2044,8 @@ void Write16(u32 addr, u16 val)
     if (addr >= 0x04000360 && addr < 0x04000380)
     {
         addr -= 0x04000360;
-        FogDensityTable[addr] = val & 0xFF;
-        FogDensityTable[addr+1] = val >> 8;
+        FogDensityTable[addr] = val & 0x7F;
+        FogDensityTable[addr+1] = (val >> 8) & 0x7F;
         return;
     }
 
@@ -2053,7 +2085,7 @@ void Write32(u32 addr, u32 val)
         FogColor = val;
         return;
     case 0x0400035C:
-        FogOffset = val;
+        FogOffset = val & 0x7FFF;
         return;
 
     case 0x04000600:
@@ -2097,10 +2129,10 @@ void Write32(u32 addr, u32 val)
     if (addr >= 0x04000360 && addr < 0x04000380)
     {
         addr -= 0x04000360;
-        FogDensityTable[addr] = val & 0xFF;
-        FogDensityTable[addr+1] = (val >> 8) & 0xFF;
-        FogDensityTable[addr+2] = (val >> 16) & 0xFF;
-        FogDensityTable[addr+3] = val >> 24;
+        FogDensityTable[addr] = val & 0x7F;
+        FogDensityTable[addr+1] = (val >> 8) & 0x7F;
+        FogDensityTable[addr+2] = (val >> 16) & 0x7F;
+        FogDensityTable[addr+3] = (val >> 24) & 0x7F;
         return;
     }
 

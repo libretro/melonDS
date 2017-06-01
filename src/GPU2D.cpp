@@ -380,6 +380,24 @@ void GPU2D::DrawScanline(u32 line)
 {
     u32* dst = &Framebuffer[256*line];
 
+    // request each 3D scanline in advance
+    // this is required for the threaded mode of the software renderer
+    // (alternately we could call GetLine() once and store the result somewhere)
+    if (Num == 0)
+        GPU3D::RequestLine(line);
+
+    line = GPU::VCount;
+
+    // scanlines that end up outside of the GPU drawing range
+    // (as a result of writing to VCount) are filled white
+    if (line > 192)
+    {
+        for (int i = 0; i < 256; i++)
+            dst[i] = 0xFFFFFFFF;
+
+        return;
+    }
+
     u32 dispmode = DispCnt >> 16;
     dispmode &= (Num ? 0x1 : 0x3);
 
