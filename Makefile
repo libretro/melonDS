@@ -108,7 +108,7 @@ else ifeq ($(platform), vita)
 else
    CC = gcc
    TARGET := $(TARGET_NAME)_libretro.dll
-   SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -static-libgcc -static-libstdc++ -lwinm -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
 endif
 
 LDFLAGS += $(LIBM) $(LIBTHREAD)
