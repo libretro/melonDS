@@ -989,13 +989,12 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     s32 x = xstart;
     Interpolator interpX(xstart, xend+1, wl, wr, 8);
 
+    if (x < 0) x = 0;
+
     // part 1: left edge
     edge = yedge | 0x1;
     for (; x < xstart+l_edgelen; x++)
     {
-        if (x < 0) continue;
-        if (x > 255) break;
-
         u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
         u32 attr = (polygon->Attr & 0x3F008000) | edge;
 
@@ -1031,10 +1030,14 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
             continue;
         }
 
+        u32 dstattr = AttrBuffer[pixeladdr];
+
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
         if (!fnDepthTest(DepthBuffer[pixeladdr], z))
         {
+            if (!(dstattr & 0x3)) continue;
+
             pixeladdr += 258;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
@@ -1100,16 +1103,10 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         }
         else
         {
-            u32 dstattr = AttrBuffer[pixeladdr];
             attr |= (1<<30);
             if (polygon->IsShadow) dstattr |= (1<<30);
 
             // skip if polygon IDs are equal
-            // note: this only happens if the destination pixel was translucent
-            // or always when drawing a shadow
-            // (the GPU keeps track of which pixels are translucent, regardless of
-            // the destination alpha)
-            // TODO: they say that there are two separate polygon ID buffers. verify that.
             if ((dstattr & 0x7F000000) == (attr & 0x7F000000))
                 continue;
 
@@ -1132,9 +1129,6 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     if (wireframe && !edge) x = xend-r_edgelen+1;
     else for (; x <= xend-r_edgelen; x++)
     {
-        if (x < 0) continue;
-        if (x > 255) break;
-
         u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
         u32 attr = (polygon->Attr & 0x3F008000) | edge;
 
@@ -1160,10 +1154,14 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
             continue;
         }
 
+        u32 dstattr = AttrBuffer[pixeladdr];
+
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
         if (!fnDepthTest(DepthBuffer[pixeladdr], z))
         {
+            if (!(dstattr & 0x3)) continue;
+
             pixeladdr += 258;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
@@ -1215,13 +1213,12 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         AttrBuffer[pixeladdr] = attr;
     }
 
+    if (xend > 255) xend = 255;
+
     // part 3: right edge
     edge = yedge | 0x2;
     for (; x <= xend; x++)
     {
-        if (x < 0) continue;
-        if (x > 255) break;
-
         u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
         u32 attr = (polygon->Attr & 0x3F008000) | edge;
 
@@ -1257,10 +1254,14 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
             continue;
         }
 
+        u32 dstattr = AttrBuffer[pixeladdr];
+
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
         if (!fnDepthTest(DepthBuffer[pixeladdr], z))
         {
+            if (!(dstattr & 0x3)) continue;
+
             pixeladdr += 258;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
@@ -1326,16 +1327,10 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         }
         else
         {
-            u32 dstattr = AttrBuffer[pixeladdr];
             attr |= (1<<30);
             if (polygon->IsShadow) dstattr |= (1<<30);
 
             // skip if polygon IDs are equal
-            // note: this only happens if the destination pixel was translucent
-            // or always when drawing a shadow
-            // (the GPU keeps track of which pixels are translucent, regardless of
-            // the destination alpha)
-            // TODO: they say that there are two separate polygon ID buffers. verify that.
             if ((dstattr & 0x7F000000) == (attr & 0x7F000000))
                 continue;
 
