@@ -165,7 +165,7 @@ void retro_get_system_info(struct retro_system_info *info)
 {
    memset(info, 0, sizeof(*info));
    info->library_name     = "melonDS";
-   info->library_version  = "0.2";
+   info->library_version  = "0.3";
    info->need_fullpath    = true;
    info->valid_extensions = "nds";
 }
@@ -431,8 +431,8 @@ bool retro_load_game(const struct retro_game_info *info)
    (void)info;
    if (!retro_firmware_status)
       return false;
-   else
-      return true;
+
+   return true;
 }
 
 void retro_unload_game(void)
