@@ -20,6 +20,7 @@
 #include <string.h>
 #include "NDS.h"
 #include "GPU.h"
+#include "Config.h"
 #include "Platform.h"
 
 
@@ -28,9 +29,20 @@ namespace GPU3D
 namespace SoftRenderer
 {
 
-u32 ColorBuffer[258*3*194];
-u32 DepthBuffer[258*3*194];
-u32 AttrBuffer[258*3*194];
+// buffer dimensions are 258x194 to add a offscreen 1px border
+// which simplifies edge marking tests
+// buffer is duplicated to keep track of the two topmost pixels
+// TODO: check if the hardware can accidentally plot pixels
+// offscreen in that border
+
+const int ScanlineWidth = 258;
+const int NumScanlines = 194;
+const int BufferSize = ScanlineWidth * NumScanlines;
+const int FirstPixelOffset = ScanlineWidth + 1;
+
+u32 ColorBuffer[BufferSize * 2];
+u32 DepthBuffer[BufferSize * 2];
+u32 AttrBuffer[BufferSize * 2];
 
 // attribute buffer:
 // bit0-3: edge flags (left/right/top/bottom)
@@ -54,6 +66,42 @@ void* Sema_ScanlineCount;
 void RenderThreadFunc();
 
 
+void StopRenderThread()
+{
+    if (RenderThreadRunning)
+    {
+        RenderThreadRunning = false;
+        Platform::Semaphore_Post(Sema_RenderStart);
+        Platform::Thread_Wait(RenderThread);
+        Platform::Thread_Free(RenderThread);
+    }
+}
+
+void SetupRenderThread()
+{
+    if (Config::Threaded3D)
+    {
+        if (!RenderThreadRunning)
+        {
+            RenderThreadRunning = true;
+            RenderThread = Platform::Thread_Create(RenderThreadFunc);
+        }
+
+        if (RenderThreadRendering)
+            Platform::Semaphore_Wait(Sema_RenderDone);
+
+        Platform::Semaphore_Reset(Sema_RenderStart);
+        Platform::Semaphore_Reset(Sema_ScanlineCount);
+
+        Platform::Semaphore_Post(Sema_RenderStart);
+    }
+    else
+    {
+        StopRenderThread();
+    }
+}
+
+
 bool Init()
 {
     Sema_RenderStart = Platform::Semaphore_Create();
@@ -68,13 +116,7 @@ bool Init()
 
 void DeInit()
 {
-    if (RenderThreadRunning)
-    {
-        RenderThreadRunning = false;
-        Platform::Semaphore_Post(Sema_RenderStart);
-        Platform::Thread_Wait(RenderThread);
-        Platform::Thread_Free(RenderThread);
-    }
+    StopRenderThread();
 
     Platform::Semaphore_Free(Sema_RenderStart);
     Platform::Semaphore_Free(Sema_RenderDone);
@@ -89,23 +131,7 @@ void Reset()
 
     PrevIsShadowMask = false;
 
-    /* TODO/FIXME - Libretro - turn this off for now */
-#if 0
-    // TODO: make it configurable
-    if (!RenderThreadRunning)
-    {
-        RenderThreadRunning = true;
-        RenderThread = Platform::Thread_Create(RenderThreadFunc);
-    }
-#endif
-
-    if (RenderThreadRendering)
-        Platform::Semaphore_Wait(Sema_RenderDone);
-
-    Platform::Semaphore_Reset(Sema_RenderStart);
-    Platform::Semaphore_Reset(Sema_ScanlineCount);
-
-    Platform::Semaphore_Post(Sema_RenderStart);
+    SetupRenderThread();
 }
 
 
@@ -251,6 +277,7 @@ public:
             this->xmax = this->xmin;
         }
 
+        // TODO: check the precision of the slope increment on hardware
         if (y0 == y1)
             Increment = 0;
         else
@@ -283,27 +310,44 @@ public:
             else                     dx = 0;
         }
 
+        s32 x = XVal();
+
         if (XMajor)
         {
             if (side) Interp.Setup(x0-1, x1-1, w0, w1, 9); // checkme
             else      Interp.Setup(x0, x1, w0, w1, 9);
-        }
-        else        Interp.Setup(y0, y1, w0, w1, 9);
+            Interp.SetX(x);
 
-        s32 x = XVal();
-        if (XMajor) Interp.SetX(x);
-        else        Interp.SetX(y);
+            // used for calculating AA coverage
+            //inv_incr = (1 << (16+10)) / Increment;
+        }
+        else
+        {
+            Interp.Setup(y0, y1, w0, w1, 9);
+            Interp.SetX(y);
+
+            //ycov_incr = Increment >> 2;
+            //ycoverage = ycov_incr >> 1;
+        }
+
         return x;
     }
-s32 DX() { return dx; }
+
     s32 Step()
     {
         dx += Increment;
         y++;
 
         s32 x = XVal();
-        if (XMajor) Interp.SetX(x);
-        else        Interp.SetX(y);
+        if (XMajor)
+        {
+            Interp.SetX(x);
+        }
+        else
+        {
+            Interp.SetX(y);
+            //ycoverage += ycov_incr;
+        }
         return x;
     }
 
@@ -326,22 +370,24 @@ s32 DX() { return dx; }
             *length = ((dx+Increment) >> 16) - (dx >> 16);
 
         // for X-major edges, coverage will be calculated later
-        *coverage = -1;
+        // we just return the factor for it
+        *coverage = 31;//inv_incr | (1<<31);
     }
 
     void EdgeParams_YMajor(s32* length, s32* coverage)
     {
         *length = 1;
 
-        if (Increment == 0)
+        /*if (Increment == 0)
         {
             *coverage = 31;
         }
         else
         {
-            *coverage = (dx & 0xF800) >> 11;
+            *coverage = (ycoverage >> 9) & 0x1F;
             if (!(side ^ Negative)) *coverage = 0x1F - *coverage;
-        }
+        }*/
+        *coverage = 31;
     }
 
     void EdgeParams(s32* length, s32* coverage)
@@ -352,23 +398,6 @@ s32 DX() { return dx; }
             return EdgeParams_YMajor(length, coverage);
     }
 
-    /*s32 EdgeLimit()
-    {
-        s32 ret;
-        if (side)
-        {
-            if (Negative) ret = x0 - ((dx+Increment) >> 16);
-            else          ret = x0 + ((dx-Increment) >> 16);
-        }
-        else
-        {
-            if (Negative) ret = x0 - ((dx-Increment) >> 16);
-            else          ret = x0 + ((dx+Increment) >> 16);
-        }
-
-        return ret;
-    }*/
-
     s32 Increment;
     bool Negative;
     bool XMajor;
@@ -378,6 +407,9 @@ private:
     s32 x0, xmin, xmax;
     s32 dx;
     s32 y;
+
+    s32 inv_incr;
+    s32 ycoverage, ycov_incr;
 };
 
 typedef struct
@@ -627,7 +659,7 @@ bool DepthTest(s32 oldz, s32 z)
     if (func_equal)
     {
         s32 diff = oldz - z;
-        if ((u32)(diff + 0x200) <= 0x400)
+        if ((u32)(diff + 0xFF) <= 0x1FE) // range is +-0xFF
             return true;
     }
     else
@@ -837,10 +869,7 @@ void SetupPolygon(RendererPolygon* rp, Polygon* polygon)
 
     if (ybot == ytop)
     {
-        //ybot++;
-
         vtop = 0; vbot = 0;
-        //xtop = 256; xbot = 0;
         int i;
 
         i = 1;
@@ -900,8 +929,6 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     bool l_filledge, r_filledge;
     s32 l_edgelen, r_edgelen;
     s32 l_edgecov, r_edgecov;
-    //Slope* slope_start;
-    //Slope* slope_end;
     Interpolator* interp_start;
     Interpolator* interp_end;
 
@@ -912,10 +939,19 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     // * right edge is filled if slope > 1
     // * left edge is filled if slope <= 1
     // * edges with slope = 0 are always filled
-    // edges are always filled if antialiasing is enabled or if the pixels are translucent
+    // right vertical edges are pushed 1px to the left
+    // edges are always filled if antialiasing/edgemarking are enabled or if the pixels are translucent
 
-    l_filledge = (rp->SlopeL.Negative || !rp->SlopeL.XMajor);
-    r_filledge = (!rp->SlopeR.Negative && rp->SlopeR.XMajor) || (rp->SlopeR.Increment==0);
+    if (wireframe || (RenderDispCnt & (1<<5)))
+    {
+        l_filledge = true;
+        r_filledge = true;
+    }
+    else
+    {
+        l_filledge = (rp->SlopeL.Negative || !rp->SlopeL.XMajor);
+        r_filledge = (!rp->SlopeR.Negative && rp->SlopeR.XMajor) || (rp->SlopeR.Increment==0);
+    }
 
     s32 wl = rp->SlopeL.Interp.Interpolate(polygon->FinalW[rp->CurVL], polygon->FinalW[rp->NextVL]);
     s32 wr = rp->SlopeR.Interp.Interpolate(polygon->FinalW[rp->CurVR], polygon->FinalW[rp->NextVR]);
@@ -995,8 +1031,8 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     edge = yedge | 0x1;
     for (; x < xstart+l_edgelen; x++)
     {
-        u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
-        u32 attr = (polygon->Attr & 0x3F008000) | edge;
+        u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
+        u32 attr = (polygon->Attr & 0x3F008000);
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1017,7 +1053,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
             // checkme
             if (polyalpha == 31)
             {
-                if (!wireframe && !(RenderDispCnt & (1<<4)))
+                if (!(RenderDispCnt & (1<<4)))
                 {
                     if (!l_filledge)
                         continue;
@@ -1038,7 +1074,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         {
             if (!(dstattr & 0x3)) continue;
 
-            pixeladdr += 258;
+            pixeladdr += BufferSize;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
         }
@@ -1058,46 +1094,41 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
+            attr |= edge;
+
             if (RenderDispCnt & (1<<4))
             {
                 // anti-aliasing: all edges are rendered
 
-                if (edge)
+                // calculate coverage
+                // TODO: optimize
+                s32 cov = 31;
+                /*if (edge & 0x1)
+                {if(y==48||true)printf("[y%d] coverage for %d: %d / %d = %d %d   %08X %d %08X\n", y, x, x-xstart, l_edgelen,
+                                 ((x - xstart) << 5) / (l_edgelen), ((x - xstart) *31) / (l_edgelen), rp->SlopeL.Increment, l_edgecov,
+                                       rp->SlopeL.DX());
+                    cov = l_edgecov;
+                    if (cov == -1) cov = ((x - xstart) << 5) / l_edgelen;
+                }
+                else if (edge & 0x2)
                 {
-                    // calculate coverage
-                    // TODO: optimize
-                    s32 cov = 31;
-                    /*if (edge & 0x1)
-                    {if(y==48||true)printf("[y%d] coverage for %d: %d / %d = %d %d   %08X %d %08X\n", y, x, x-xstart, l_edgelen,
-                                     ((x - xstart) << 5) / (l_edgelen), ((x - xstart) *31) / (l_edgelen), rp->SlopeL.Increment, l_edgecov,
-                                           rp->SlopeL.DX());
-                        cov = l_edgecov;
-                        if (cov == -1) cov = ((x - xstart) << 5) / l_edgelen;
-                    }
-                    else if (edge & 0x2)
-                    {
-                        cov = r_edgecov;
-                        if (cov == -1) cov = ((xend - x) << 5) / r_edgelen;
-                    }cov=31;*/
-                    attr |= (cov << 8);
+                    cov = r_edgecov;
+                    if (cov == -1) cov = ((xend - x) << 5) / r_edgelen;
+                }cov=31;*/
+                cov = l_edgecov;
+                if (cov == -1) cov = 31;
+                attr |= (cov << 8);
 
-                    // push old pixel down if needed
-                    // we only need to do it for opaque edge pixels, since
-                    // this only serves for antialiasing
-                    ColorBuffer[pixeladdr+258] = ColorBuffer[pixeladdr];
-                    DepthBuffer[pixeladdr+258] = DepthBuffer[pixeladdr];
-                    AttrBuffer[pixeladdr+258] = AttrBuffer[pixeladdr];
-                }
-            }
-            else
-            {
-                // edge fill rules for opaque pixels
-                if (!wireframe)
+                // push old pixel down if needed
+                if (pixeladdr < BufferSize)
                 {
-                    if (!l_filledge)
-                        continue;
+                    ColorBuffer[pixeladdr+BufferSize] = ColorBuffer[pixeladdr];
+                    DepthBuffer[pixeladdr+BufferSize] = DepthBuffer[pixeladdr];
+                    AttrBuffer[pixeladdr+BufferSize] = AttrBuffer[pixeladdr];
                 }
             }
+            else if (!l_filledge)
+                continue;
 
             DepthBuffer[pixeladdr] = z;
         }
@@ -1129,8 +1160,8 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     if (wireframe && !edge) x = xend-r_edgelen+1;
     else for (; x <= xend-r_edgelen; x++)
     {
-        u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
-        u32 attr = (polygon->Attr & 0x3F008000) | edge;
+        u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
+        u32 attr = (polygon->Attr & 0x3F008000);
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1162,7 +1193,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         {
             if (!(dstattr & 0x3)) continue;
 
-            pixeladdr += 258;
+            pixeladdr += BufferSize;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
         }
@@ -1182,6 +1213,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
+            attr |= edge;
             DepthBuffer[pixeladdr] = z;
         }
         else
@@ -1219,8 +1251,8 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     edge = yedge | 0x2;
     for (; x <= xend; x++)
     {
-        u32 pixeladdr = 258*3 + 1 + (y*258*3) + x;
-        u32 attr = (polygon->Attr & 0x3F008000) | edge;
+        u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
+        u32 attr = (polygon->Attr & 0x3F008000);
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1241,7 +1273,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
             // checkme
             if (polyalpha == 31)
             {
-                if (!wireframe && !(RenderDispCnt & (1<<4)))
+                if (!(RenderDispCnt & (1<<4)))
                 {
                     if (!r_filledge)
                         continue;
@@ -1262,7 +1294,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         {
             if (!(dstattr & 0x3)) continue;
 
-            pixeladdr += 258;
+            pixeladdr += BufferSize;
             if (!fnDepthTest(DepthBuffer[pixeladdr], z))
                 continue;
         }
@@ -1282,46 +1314,41 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
+            attr |= edge;
+
             if (RenderDispCnt & (1<<4))
             {
                 // anti-aliasing: all edges are rendered
 
-                if (edge)
+                // calculate coverage
+                // TODO: optimize
+                s32 cov = 31;
+                /*if (edge & 0x1)
+                {if(y==48||true)printf("[y%d] coverage for %d: %d / %d = %d %d   %08X %d %08X\n", y, x, x-xstart, l_edgelen,
+                                 ((x - xstart) << 5) / (l_edgelen), ((x - xstart) *31) / (l_edgelen), rp->SlopeL.Increment, l_edgecov,
+                                       rp->SlopeL.DX());
+                    cov = l_edgecov;
+                    if (cov == -1) cov = ((x - xstart) << 5) / l_edgelen;
+                }
+                else if (edge & 0x2)
                 {
-                    // calculate coverage
-                    // TODO: optimize
-                    s32 cov = 31;
-                    /*if (edge & 0x1)
-                    {if(y==48||true)printf("[y%d] coverage for %d: %d / %d = %d %d   %08X %d %08X\n", y, x, x-xstart, l_edgelen,
-                                     ((x - xstart) << 5) / (l_edgelen), ((x - xstart) *31) / (l_edgelen), rp->SlopeL.Increment, l_edgecov,
-                                           rp->SlopeL.DX());
-                        cov = l_edgecov;
-                        if (cov == -1) cov = ((x - xstart) << 5) / l_edgelen;
-                    }
-                    else if (edge & 0x2)
-                    {
-                        cov = r_edgecov;
-                        if (cov == -1) cov = ((xend - x) << 5) / r_edgelen;
-                    }cov=31;*/
-                    attr |= (cov << 8);
+                    cov = r_edgecov;
+                    if (cov == -1) cov = ((xend - x) << 5) / r_edgelen;
+                }cov=31;*/
+                cov = r_edgecov;
+                if (cov == -1) cov = 31;
+                attr |= (cov << 8);
 
-                    // push old pixel down if needed
-                    // we only need to do it for opaque edge pixels, since
-                    // this only serves for antialiasing
-                    ColorBuffer[pixeladdr+258] = ColorBuffer[pixeladdr];
-                    DepthBuffer[pixeladdr+258] = DepthBuffer[pixeladdr];
-                    AttrBuffer[pixeladdr+258] = AttrBuffer[pixeladdr];
-                }
-            }
-            else
-            {
-                // edge fill rules for opaque pixels
-                if (!wireframe)
+                // push old pixel down if needed
+                if (pixeladdr < BufferSize)
                 {
-                    if (!r_filledge)
-                        continue;
+                    ColorBuffer[pixeladdr+BufferSize] = ColorBuffer[pixeladdr];
+                    DepthBuffer[pixeladdr+BufferSize] = DepthBuffer[pixeladdr];
+                    AttrBuffer[pixeladdr+BufferSize] = AttrBuffer[pixeladdr];
                 }
             }
+            else if (!r_filledge)
+                continue;
 
             DepthBuffer[pixeladdr] = z;
         }
@@ -1352,35 +1379,6 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     rp->XR = rp->SlopeR.Step();
 }
 
-#if 0
-void RenderPolygon(RendererPolygon* rp)
-{
-    Polygon* polygon = rp->PolyData;
-    int nverts = polygon->NumVertices;
-    bool isline = false;
-
-    int vtop = polygon->VTop, vbot = polygon->VBottom;
-    s32 ytop = polygon->YTop, ybot = polygon->YBottom;
-    s32 xtop = polygon->XTop, xbot = polygon->XBottom;
-
-    if (ytop > 191) return;
-
-    // draw, line per line
-
-    if (ybot > 192) ybot = 192;
-
-    /*if (polygon->ClearStencil)
-    {
-        memset(StencilBuffer, 0, 192*256);
-    }*/
-
-    for (s32 y = ytop; y < ybot; y++)
-    {
-        RenderPolygonScanline(rp, y);
-    }
-}
-#endif
-
 void RenderScanline(s32 y, int npolys)
 {
     for (int i = 0; i < npolys; i++)
@@ -1395,6 +1393,44 @@ void RenderScanline(s32 y, int npolys)
 
 void ScanlineFinalPass(s32 y)
 {
+    // to consider:
+    // clearing all polygon fog flags if the master flag isn't set?
+    // merging all final pass loops into one?
+
+    if (RenderDispCnt & (1<<5))
+    {
+        // edge marking
+
+        // TODO: is it applied to bottom pixels?
+
+        for (int x = 0; x < 256; x++)
+        {
+            u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
+
+            u32 attr = AttrBuffer[pixeladdr];
+            if (!(attr & 0xF)) continue;
+
+            u32 polyid = attr >> 24;
+            u32 z = DepthBuffer[pixeladdr];
+
+            if (((polyid != (AttrBuffer[pixeladdr-1] >> 24)) && (z < DepthBuffer[pixeladdr-1])) ||
+                ((polyid != (AttrBuffer[pixeladdr+1] >> 24)) && (z < DepthBuffer[pixeladdr+1])) ||
+                ((polyid != (AttrBuffer[pixeladdr-ScanlineWidth] >> 24)) && (z < DepthBuffer[pixeladdr-ScanlineWidth])) ||
+                ((polyid != (AttrBuffer[pixeladdr+ScanlineWidth] >> 24)) && (z < DepthBuffer[pixeladdr+ScanlineWidth])))
+            {
+                u16 edgecolor = RenderEdgeTable[polyid >> 3];
+                u32 edgeR = (edgecolor << 1) & 0x3E; if (edgeR) edgeR++;
+                u32 edgeG = (edgecolor >> 4) & 0x3E; if (edgeG) edgeG++;
+                u32 edgeB = (edgecolor >> 9) & 0x3E; if (edgeB) edgeB++;
+
+                ColorBuffer[pixeladdr] = edgeR | (edgeG << 8) | (edgeB << 16) | (ColorBuffer[pixeladdr] & 0xFF000000);
+
+                // break antialiasing coverage (checkme)
+                AttrBuffer[pixeladdr] = (AttrBuffer[pixeladdr] & 0xFFFFE0FF) | 0x00001000;
+            }
+        }
+    }
+
     if (RenderDispCnt & (1<<7))
     {
         // fog
@@ -1404,7 +1440,7 @@ void ScanlineFinalPass(s32 y)
         // multiplied by 0x200 to match Z-buffer values
 
         // fog is applied to the topmost two pixels, which is required for
-        // proper antialiasing
+        // proper antialiasing (TODO)
 
         bool fogcolor = !(RenderDispCnt & (1<<6));
         u32 fogshift = (RenderDispCnt >> 8) & 0xF;
@@ -1415,11 +1451,11 @@ void ScanlineFinalPass(s32 y)
         u32 fogB = (RenderFogColor >> 9) & 0x3E; if (fogB) fogB++;
         u32 fogA = (RenderFogColor >> 16) & 0x1F;
 
-        for (int i = 0; i < 258*2; i+=258)
+        //for (int i = 0; i < 258*2; i+=258)
         {
             for (int x = 0; x < 256; x++)
             {
-                u32 pixeladdr = 258*3 + 1 + (y*258*3) + i + x;
+                u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
 
                 u32 attr = AttrBuffer[pixeladdr];
                 if (!(attr & (1<<15))) continue;
@@ -1505,7 +1541,7 @@ void ScanlineFinalPass(s32 y)
             u32 botG = (botcolor >> 8) & 0x3F;
             u32 botB = (botcolor >> 16) & 0x3F;
             u32 botA = (botcolor >> 24) & 0x1F;
-if (y==48) printf("x=%d: cov=%d\n", x, coverage);
+//if (y==48) printf("x=%d: cov=%d\n", x, coverage);
             coverage++;
 
             // only blend color if the bottom pixel isn't fully transparent
@@ -1531,17 +1567,15 @@ void ClearBuffers()
     u32 polyid = RenderClearAttr1 & 0x3F000000;
 
     // fill screen borders for edge marking
-    // CHECKME
-    // GBAtek is unsure about the polygon ID, and nothing is said about Z
 
-    for (int x = 0; x < 258; x++)
+    for (int x = 0; x < ScanlineWidth; x++)
     {
         ColorBuffer[x] = 0;
         DepthBuffer[x] = clearz;
         AttrBuffer[x] = polyid;
     }
 
-    for (int x = 258*3; x < 258*3*193; x+=(258*3))
+    for (int x = ScanlineWidth; x < ScanlineWidth*193; x+=ScanlineWidth)
     {
         ColorBuffer[x] = 0;
         DepthBuffer[x] = clearz;
@@ -1551,7 +1585,7 @@ void ClearBuffers()
         AttrBuffer[x+257] = polyid;
     }
 
-    for (int x = 258*3*193; x < 258*3*194; x++)
+    for (int x = ScanlineWidth*193; x < ScanlineWidth*194; x++)
     {
         ColorBuffer[x] = 0;
         DepthBuffer[x] = clearz;
@@ -1565,7 +1599,7 @@ void ClearBuffers()
         u8 xoff = (RenderClearAttr2 >> 16) & 0xFF;
         u8 yoff = (RenderClearAttr2 >> 24) & 0xFF;
 
-        for (int y = 0; y < 258*3*192; y+=(258*3))
+        for (int y = 0; y < ScanlineWidth*192; y+=ScanlineWidth)
         {
             for (int x = 0; x < 256; x++)
             {
@@ -1581,7 +1615,7 @@ void ClearBuffers()
 
                 u32 z = ((val3 & 0x7FFF) * 0x200) + 0x1FF;
 
-                u32 pixeladdr = 258*3 + 1 + y + x;
+                u32 pixeladdr = FirstPixelOffset + y + x;
                 ColorBuffer[pixeladdr] = color;
                 DepthBuffer[pixeladdr] = z;
                 AttrBuffer[pixeladdr] = polyid | (val3 & 0x8000);
@@ -1603,11 +1637,11 @@ void ClearBuffers()
 
 		polyid |= (RenderClearAttr1 & 0x8000);
 
-        for (int y = 0; y < 258*3*192; y+=(258*3))
+        for (int y = 0; y < ScanlineWidth*192; y+=ScanlineWidth)
         {
             for (int x = 0; x < 256; x++)
             {
-                u32 pixeladdr = 258*3 + 1 + y + x;
+                u32 pixeladdr = FirstPixelOffset + y + x;
                 ColorBuffer[pixeladdr] = color;
                 DepthBuffer[pixeladdr] = clearz;
                 AttrBuffer[pixeladdr] = polyid;
@@ -1653,15 +1687,21 @@ void RenderPolygons(bool threaded, Polygon* polygons, int npolys)
 
 void VCount144()
 {
-    Platform::Semaphore_Wait(Sema_RenderDone);
+    if (RenderThreadRunning)
+        Platform::Semaphore_Wait(Sema_RenderDone);
 }
 
-void RenderFrame(Vertex* vertices, Polygon* polygons, int npolys)
+void RenderFrame()
 {
-    //ClearBuffers();
-    //RenderPolygons(false, polygons, npolys);
-
-    Platform::Semaphore_Post(Sema_RenderStart);
+    if (RenderThreadRunning)
+    {
+        Platform::Semaphore_Post(Sema_RenderStart);
+    }
+    else
+    {
+        ClearBuffers();
+        RenderPolygons(false, RenderPolygonRAM, RenderNumPolygons);
+    }
 }
 
 void RenderThreadFunc()
@@ -1682,12 +1722,13 @@ void RenderThreadFunc()
 
 void RequestLine(int line)
 {
-    Platform::Semaphore_Wait(Sema_ScanlineCount);
+    if (RenderThreadRunning)
+        Platform::Semaphore_Wait(Sema_ScanlineCount);
 }
 
 u32* GetLine(int line)
 {
-    return &ColorBuffer[line * 258*3  + 258*3 + 1];
+    return &ColorBuffer[(line * ScanlineWidth) + FirstPixelOffset];
 }
 
 }

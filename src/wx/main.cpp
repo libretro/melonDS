@@ -22,6 +22,7 @@
 #include "../Config.h"
 #include "../NDS.h"
 #include "../GPU.h"
+#include "../GPU3D.h"
 #include "../SPU.h"
 
 #include "InputConfig.h"
@@ -84,11 +85,35 @@ int CALLBACK WinMain(HINSTANCE hinst, HINSTANCE hprev, LPSTR cmdline, int cmdsho
 #endif // __WXMSW__
 
 
+bool _fileexists(char* name)
+{
+    FILE* f = fopen(name, "rb");
+    if (!f) return false;
+    fclose(f);
+    return true;
+}
+
+
 bool wxApp_melonDS::OnInit()
 {
     printf("melonDS " MELONDS_VERSION "\n" MELONDS_URL "\n");
 
     Config::Load();
+    
+    if (!_fileexists("bios7.bin") || !_fileexists("bios9.bin") || !_fileexists("firmware.bin"))
+    {
+        wxMessageBox(
+            "One or more of the following required files don't exist or couldn't be accessed:\n\n"
+            "bios7.bin -- ARM7 BIOS\n"
+            "bios9.bin -- ARM9 BIOS\n"
+            "firmware.bin -- firmware image\n\n"
+            "Place the following files in the directory you run melonDS from.\n"
+            "Make sure that the files can be accessed.",
+            "melonDS",
+            wxICON_ERROR);
+            
+        return false;
+    }
 
     emuthread = new EmuThread();
     if (emuthread->Run() != wxTHREAD_NO_ERROR)
@@ -283,8 +308,16 @@ void MainFrame::OnReset(wxCommandEvent& event)
 
 void MainFrame::OnEmuConfig(wxCommandEvent& event)
 {
+    bool oldpause = emuthread->EmuIsPaused();
+    if (!oldpause) emuthread->EmuPause();
+
     EmuConfigDialog dlg(this);
     dlg.ShowModal();
+
+    // apply threaded 3D setting
+    GPU3D::SoftRenderer::SetupRenderThread();
+
+    if (!oldpause) emuthread->EmuRun();
 }
 
 void MainFrame::OnInputConfig(wxCommandEvent& event)

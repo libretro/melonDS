@@ -109,6 +109,8 @@ u32 SqrtVal[2];
 u32 SqrtRes;
 
 u32 KeyInput;
+u16 KeyCnt;
+u16 RCnt;
 
 bool Running;
 
@@ -231,6 +233,9 @@ void SetupDirectBoot()
     PowerControl9 = 0x820F;
     GPU::DisplaySwap(PowerControl9);
 
+    // checkme
+    RCnt = 0x8000;
+
     SPU::SetBias(0x200);
 
     ARM7BIOSProt = 0x1204;
@@ -350,6 +355,8 @@ void Reset()
     ARM7Offset = 0;
 
     KeyInput = 0x007F03FF;
+    KeyCnt = 0;
+    RCnt = 0;
 
     NDSCart::Reset();
     GPU::Reset();
@@ -1297,7 +1304,7 @@ void ARM7Write16(u32 addr, u16 val)
         return;
     }
 
-    printf("unknown arm7 write16 %08X %04X @ %08X\n", addr, val, ARM7->R[15]);
+    //printf("unknown arm7 write16 %08X %04X @ %08X\n", addr, val, ARM7->R[15]);
 }
 
 void ARM7Write32(u32 addr, u32 val)
@@ -1333,7 +1340,7 @@ void ARM7Write32(u32 addr, u32 val)
         return;
     }
 
-    printf("unknown arm7 write32 %08X %08X @ %08X\n", addr, val, ARM7->R[15]);
+    //printf("unknown arm7 write32 %08X %08X @ %08X\n", addr, val, ARM7->R[15]);
 }
 
 
@@ -1345,6 +1352,8 @@ u8 ARM9IORead8(u32 addr)
     {
     case 0x04000130: return KeyInput & 0xFF;
     case 0x04000131: return (KeyInput >> 8) & 0xFF;
+    case 0x04000132: return KeyCnt & 0xFF;
+    case 0x04000133: return KeyCnt >> 8;
 
     case 0x040001A2: return NDSCart::ReadSPIData();
 
@@ -1429,6 +1438,7 @@ u16 ARM9IORead16(u32 addr)
     case 0x0400010E: return Timers[3].Cnt;
 
     case 0x04000130: return KeyInput & 0xFFFF;
+    case 0x04000132: return KeyCnt;
 
     case 0x04000180: return IPCSync9;
     case 0x04000184:
@@ -1519,6 +1529,8 @@ u32 ARM9IORead32(u32 addr)
     case 0x04000108: return TimerGetCounter(2) | (Timers[2].Cnt << 16);
     case 0x0400010C: return TimerGetCounter(3) | (Timers[3].Cnt << 16);
 
+    case 0x04000130: return (KeyInput & 0xFFFF) | (KeyCnt << 16);
+
     case 0x040001A0: return NDSCart::SPICnt | (NDSCart::ReadSPIData() << 16);
     case 0x040001A4: return NDSCart::ROMCnt;
 
@@ -1601,6 +1613,13 @@ void ARM9IOWrite8(u32 addr, u8 val)
 {
     switch (addr)
     {
+    case 0x04000132:
+        KeyCnt = (KeyCnt & 0xFF00) | val;
+        return;
+    case 0x04000133:
+        KeyCnt = (KeyCnt & 0x00FF) | (val << 8);
+        return;
+
     case 0x040001A0:
         if (!(ExMemCnt[0] & (1<<11)))
         {
@@ -1699,6 +1718,10 @@ void ARM9IOWrite16(u32 addr, u16 val)
     case 0x0400010A: TimerStart(2, val); return;
     case 0x0400010C: Timers[3].Reload = val; return;
     case 0x0400010E: TimerStart(3, val); return;
+
+    case 0x04000132:
+        KeyCnt = val;
+        return;
 
     case 0x04000180:
         IPCSync7 &= 0xFFF0;
@@ -1854,6 +1877,10 @@ void ARM9IOWrite32(u32 addr, u32 val)
         TimerStart(3, val>>16);
         return;
 
+    case 0x04000130:
+        KeyCnt = val >> 16;
+        return;
+
     case 0x04000188:
         if (IPCFIFOCnt9 & 0x8000)
         {
@@ -1961,6 +1988,10 @@ u8 ARM7IORead8(u32 addr)
     {
     case 0x04000130: return KeyInput & 0xFF;
     case 0x04000131: return (KeyInput >> 8) & 0xFF;
+    case 0x04000132: return KeyCnt & 0xFF;
+    case 0x04000133: return KeyCnt >> 8;
+    case 0x04000134: return RCnt & 0xFF;
+    case 0x04000135: return RCnt >> 8;
     case 0x04000136: return (KeyInput >> 16) & 0xFF;
     case 0x04000137: return KeyInput >> 24;
 
@@ -2022,9 +2053,10 @@ u16 ARM7IORead16(u32 addr)
     case 0x0400010E: return Timers[7].Cnt;
 
     case 0x04000130: return KeyInput & 0xFFFF;
+    case 0x04000132: return KeyCnt;
+    case 0x04000134: return RCnt;
     case 0x04000136: return KeyInput >> 16;
 
-    case 0x04000134: return 0x8000;
     case 0x04000138: return RTC::Read();
 
     case 0x04000180: return IPCSync7;
@@ -2094,6 +2126,10 @@ u32 ARM7IORead32(u32 addr)
     case 0x04000108: return TimerGetCounter(6) | (Timers[6].Cnt << 16);
     case 0x0400010C: return TimerGetCounter(7) | (Timers[7].Cnt << 16);
 
+    case 0x04000130: return (KeyInput & 0xFFFF) | (KeyCnt << 16);
+    case 0x04000134: return RCnt | (KeyCnt & 0xFFFF0000);
+    case 0x04000138: return RTC::Read();
+
     case 0x040001A0: return NDSCart::SPICnt | (NDSCart::ReadSPIData() << 16);
     case 0x040001A4: return NDSCart::ROMCnt;
 
@@ -2152,6 +2188,19 @@ void ARM7IOWrite8(u32 addr, u8 val)
 {
     switch (addr)
     {
+    case 0x04000132:
+        KeyCnt = (KeyCnt & 0xFF00) | val;
+        return;
+    case 0x04000133:
+        KeyCnt = (KeyCnt & 0x00FF) | (val << 8);
+        return;
+    case 0x04000134:
+        RCnt = (RCnt & 0xFF00) | val;
+        return;
+    case 0x04000135:
+        RCnt = (RCnt & 0x00FF) | (val << 8);
+        return;
+
     case 0x04000138: RTC::Write(val, true); return;
 
     case 0x040001A0:
@@ -2231,7 +2280,8 @@ void ARM7IOWrite16(u32 addr, u16 val)
     case 0x0400010C: Timers[7].Reload = val; return;
     case 0x0400010E: TimerStart(7, val); return;
 
-    case 0x04000134: /* TODO? */ return;
+    case 0x04000132: KeyCnt = val; return;
+    case 0x04000134: RCnt = val; return;
 
     case 0x04000138: RTC::Write(val, false); return;
 
@@ -2356,6 +2406,10 @@ void ARM7IOWrite32(u32 addr, u32 val)
         Timers[7].Reload = val & 0xFFFF;
         TimerStart(7, val>>16);
         return;
+
+    case 0x04000130: KeyCnt = val >> 16; return;
+    case 0x04000134: RCnt = val & 0xFFFF; return;
+    case 0x04000138: RTC::Write(val & 0xFFFF, false); return;
 
     case 0x04000188:
         if (IPCFIFOCnt7 & 0x8000)
