@@ -123,8 +123,11 @@ include Makefile.common
 
 OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 
-CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) -DHAVE_THREADS
-CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) -DHAVE_THREADS
+#CFLAGS  += -DHAVE_THREADS
+#CXXFLAGS  += -DHAVE_THREADS
+
+CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
+CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
 
 all: $(TARGET)
 
