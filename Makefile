@@ -59,23 +59,23 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
-	LIBTHREAD=-lpthread
+	#LIBTHREAD=-lpthread
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T
 	LIBM :=
-	LIBTHREAD=-lpthread
+	#LIBTHREAD=-lpthread
 else ifneq (,$(findstring osx,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
-	LIBTHREAD=-lpthread
+	#LIBTHREAD=-lpthread
 else ifneq (,$(findstring ios,$(platform)))
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
 	fpic := -fPIC
 	SHARED := -dynamiclib
-	LIBTHREAD=-lpthread
+	#LIBTHREAD=-lpthread
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
@@ -94,7 +94,7 @@ else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
-	LIBTHREAD=-lpthread
+	#LIBTHREAD=-lpthread
 else ifeq ($(platform), emscripten)
    TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
@@ -108,7 +108,7 @@ else ifeq ($(platform), vita)
 else
    CC = gcc
    TARGET := $(TARGET_NAME)_libretro.dll
-   SHARED := -shared -static-libgcc -static-libstdc++ -lwinm -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
 endif
 
 LDFLAGS += $(LIBM) $(LIBTHREAD)
