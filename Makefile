@@ -102,8 +102,9 @@ else ifeq ($(platform), emscripten)
 else ifeq ($(platform), vita)
    TARGET := $(TARGET_NAME)_vita.a
    CC = arm-vita-eabi-gcc
+   CXX = arm-vita-eabi-g++
    AR = arm-vita-eabi-ar
-   CXXFLAGS += -Wl,-q -Wall -O3
+   CXXFLAGS += -Wl,-q -Wall -O3 -fno-short-enums -fno-optimize-sibling-calls
 	STATIC_LINKING = 1
 else
    CC = gcc
