@@ -417,7 +417,6 @@ u32 RunFrame()
 {
     if (!Running) return 263; // dorp
 
-
     GPU::StartFrame();
 
     while (Running && GPU::TotalScanlines==0)
@@ -450,7 +449,7 @@ u32 RunFrame()
             if (cycles > 0) cycles = DMAs[5]->Run(cycles);
             if (cycles > 0) cycles = DMAs[6]->Run(cycles);
             if (cycles > 0) cycles = DMAs[7]->Run(cycles);
-            ARM7Offset = cycles;
+            ARM7Offset = -cycles;
         }
         else
         {
@@ -859,15 +858,13 @@ void debug(u32 param)
     //for (int i = 0; i < 9; i++)
     //    printf("VRAM %c: %02X\n", 'A'+i, GPU::VRAMCNT[i]);
 
-    /*FILE* shit = fopen("debug/poke7.bin", "wb");
-    for (u32 i = 0x02000000; i < 0x03810000; i+=4)
+    /*FILE*
+    shit = fopen("debug/pictochat.bin", "wb");
+    for (u32 i = 0x02000000; i < 0x02400000; i+=4)
     {
         u32 val = ARM7Read32(i);
         fwrite(&val, 4, 1, shit);
     }
-    fclose(shit);*/
-    /*FILE*
-    shit = fopen("debug/pictochat7.bin", "wb");
     for (u32 i = 0x037F0000; i < 0x03810000; i+=4)
     {
         u32 val = ARM7Read32(i);
