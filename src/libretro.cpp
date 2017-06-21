@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 #include <stdio.h>
 
@@ -163,6 +164,7 @@ static retro_environment_t environ_cb;
 
 void retro_init(void)
 {
+   srand(time(NULL));
    frame_buf = (uint8_t*)malloc(VIDEO_PIXELS * sizeof(uint32_t));
    const char *dir = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
