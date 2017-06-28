@@ -15,7 +15,6 @@
 #define socket_t    SOCKET
 #define sockaddr_t  SOCKADDR
 #define pcap_dev_name description
-
 #else
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -298,7 +297,7 @@ namespace Platform
 
       sockaddr_t saddr;
       saddr.sa_family = AF_INET;
-      *(u32*)&saddr.sa_data[2] = htonl(INADDR_LOOPBACK);//htonl(INADDR_ANY);
+      *(u32*)&saddr.sa_data[2] = htonl(INADDR_ANY);
       *(u16*)&saddr.sa_data[0] = htons(7064);
       res = bind(MPSocket, &saddr, sizeof(sockaddr_t));
       if (res < 0)
