@@ -30,6 +30,7 @@ enum
     Event_SPU,
     Event_Wifi,
 
+    Event_DisplayFIFO,
     Event_ROMTransfer,
 
     Event_MAX
@@ -126,6 +127,9 @@ bool HaltInterrupted(u32 cpu);
 void StopCPU(u32 cpu, u32 mask);
 void ResumeCPU(u32 cpu, u32 mask);
 
+u32 GetPC(u32 cpu);
+
+bool DMAsInMode(u32 cpu, u32 mode);
 void CheckDMAs(u32 cpu, u32 mode);
 void StopDMAs(u32 cpu, u32 mode);
 

@@ -108,6 +108,10 @@ void GPU2D::Reset()
     EVB = 0;
     EVY = 0;
 
+    memset(DispFIFO, 0, 16*2);
+    DispFIFOReadPtr = 0;
+    DispFIFOWritePtr = 0;
+
     memset(DispFIFOBuffer, 0, 256*2);
 
     CaptureCnt = 0;
@@ -328,6 +332,15 @@ void GPU2D::Write16(u32 addr, u16 val)
         if (EVY > 16) EVY = 16;
         return;
 
+    case 0x068:
+        DispFIFO[DispFIFOWritePtr] = val;
+        return;
+    case 0x06A:
+        DispFIFO[DispFIFOWritePtr+1] = val;
+        DispFIFOWritePtr += 2;
+        DispFIFOWritePtr &= 0xF;
+        return;
+
     case 0x06C: MasterBrightness = val; return;
     }
 
@@ -369,6 +382,13 @@ void GPU2D::Write32(u32 addr, u32 val)
         // esp. if a capture is happening
         CaptureCnt = val & 0xEF3F1F1F;
         return;
+
+    case 0x068:
+        DispFIFO[DispFIFOWritePtr] = val & 0xFFFF;
+        DispFIFO[DispFIFOWritePtr+1] = val >> 16;
+        DispFIFOWritePtr += 2;
+        DispFIFOWritePtr &= 0xF;
+        return;
     }
 
     Write16(addr, val&0xFFFF);
@@ -379,6 +399,7 @@ void GPU2D::Write32(u32 addr, u32 val)
 void GPU2D::DrawScanline(u32 line)
 {
     u32* dst = &Framebuffer[256*line];
+    u32 mode1gfx[256];
 
     // request each 3D scanline in advance
     // this is required for the threaded mode of the software renderer
@@ -402,23 +423,7 @@ void GPU2D::DrawScanline(u32 line)
     dispmode &= (Num ? 0x1 : 0x3);
 
     // always render regular graphics
-    DrawScanline_Mode1(line, dst);
-
-    // capture
-    if ((Num == 0) && (CaptureCnt & (1<<31)))
-    {
-        u32 capwidth, capheight;
-        switch ((CaptureCnt >> 20) & 0x3)
-        {
-        case 0: capwidth = 128; capheight = 128; break;
-        case 1: capwidth = 256; capheight = 64;  break;
-        case 2: capwidth = 256; capheight = 128; break;
-        case 3: capwidth = 256; capheight = 192; break;
-        }
-
-        if (line < capheight)
-            DoCapture(line, capwidth, dst);
-    }
+    DrawScanline_Mode1(line, mode1gfx);
 
     switch (dispmode)
     {
@@ -429,7 +434,11 @@ void GPU2D::DrawScanline(u32 line)
         }
         break;
 
-    case 1: // regular display, already taken care of
+    case 1: // regular display
+        {
+            for (int i = 0; i < 256; i++)
+                dst[i] = mode1gfx[i];
+        }
         break;
 
     case 2: // VRAM display
@@ -460,7 +469,7 @@ void GPU2D::DrawScanline(u32 line)
         }
         break;
 
-    case 3: // FIFO display (grossly inaccurate)
+    case 3: // FIFO display
         {
             for (int i = 0; i < 256; i++)
             {
@@ -473,6 +482,22 @@ void GPU2D::DrawScanline(u32 line)
             }
         }
         break;
+    }
+
+    // capture
+    if ((Num == 0) && (CaptureCnt & (1<<31)))
+    {
+        u32 capwidth, capheight;
+        switch ((CaptureCnt >> 20) & 0x3)
+        {
+        case 0: capwidth = 128; capheight = 128; break;
+        case 1: capwidth = 256; capheight = 64;  break;
+        case 2: capwidth = 256; capheight = 128; break;
+        case 3: capwidth = 256; capheight = 192; break;
+        }
+
+        if (line < capheight)
+            DoCapture(line, capwidth, mode1gfx);
     }
 
     // master brightness
@@ -532,6 +557,9 @@ void GPU2D::DrawScanline(u32 line)
 void GPU2D::VBlank()
 {
     CaptureCnt &= ~(1<<31);
+
+    DispFIFOReadPtr = 0;
+    DispFIFOWritePtr = 0;
 }
 
 void GPU2D::VBlankEnd()
@@ -694,14 +722,15 @@ void GPU2D::DoCapture(u32 line, u32 width, u32* src)
     }
 }
 
-void GPU2D::FIFODMA(u32 addr)
+void GPU2D::SampleFIFO(u32 offset, u32 num)
 {
-    for (int i = 0; i < 256; i += 2)
+    for (u32 i = 0; i < num; i++)
     {
-        u32 val = NDS::ARM9Read32(addr);
-        addr += 4;
-        DispFIFOBuffer[i] = val & 0xFFFF;
-        DispFIFOBuffer[i+1] = val >> 16;
+        u16 val = DispFIFO[DispFIFOReadPtr];
+        DispFIFOReadPtr++;
+        DispFIFOReadPtr &= 0xF;
+
+        DispFIFOBuffer[offset+i] = val;
     }
 }
 
@@ -891,6 +920,36 @@ void GPU2D::DrawScanlineBGMode(u32 line, u32* spritebuf, u32* dst)
     }
 }
 
+void GPU2D::DrawScanlineBGMode6(u32 line, u32* spritebuf, u32* dst)
+{
+    if (Num)
+    {
+        printf("GPU2D: MODE6 ON SUB GPU???\n");
+        return;
+    }
+
+    for (int i = 3; i >= 0; i--)
+    {
+        if ((BGCnt[2] & 0x3) == i)
+        {
+            if (DispCnt & 0x0400)
+            {
+                printf("GPU2D: MODE6 LARGE BG TODO\n");
+            }
+        }
+        if ((BGCnt[0] & 0x3) == i)
+        {
+            if (DispCnt & 0x0100)
+            {
+                if (DispCnt & 0x8)
+                    DrawBG_3D(line, dst);
+            }
+        }
+        if (DispCnt & 0x1000)
+            InterleaveSprites(spritebuf, 0x8000 | (i<<16), dst);
+    }
+}
+
 void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
 {
     u32 linebuf[256*2 + 64];
@@ -921,6 +980,7 @@ void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
     memset(spritebuf, 0, 256*4);
     if (DispCnt & 0x1000) DrawSprites(line, spritebuf);
 
+    // TODO: what happens in mode 7? mode 6 on the sub engine?
     switch (DispCnt & 0x7)
     {
     case 0: DrawScanlineBGMode<0>(line, spritebuf, linebuf); break;
@@ -929,6 +989,7 @@ void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
     case 3: DrawScanlineBGMode<3>(line, spritebuf, linebuf); break;
     case 4: DrawScanlineBGMode<4>(line, spritebuf, linebuf); break;
     case 5: DrawScanlineBGMode<5>(line, spritebuf, linebuf); break;
+    case 6: DrawScanlineBGMode6(line, spritebuf, linebuf); break;
     }
 
     // color special effects

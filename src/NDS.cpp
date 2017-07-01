@@ -610,6 +610,11 @@ void ResumeCPU(u32 cpu, u32 mask)
     CPUStop &= ~mask;
 }
 
+u32 GetPC(u32 cpu)
+{
+    return cpu ? ARM7->R[15] : ARM9->R[15];
+}
+
 
 
 void HandleTimerOverflow(u32 tid)
@@ -673,6 +678,16 @@ void RunTimingCriticalDevices(u32 cpu, s32 cycles)
 }
 
 
+
+bool DMAsInMode(u32 cpu, u32 mode)
+{
+    cpu <<= 2;
+    if (DMAs[cpu+0]->IsInMode(mode)) return true;
+    if (DMAs[cpu+1]->IsInMode(mode)) return true;
+    if (DMAs[cpu+2]->IsInMode(mode)) return true;
+    if (DMAs[cpu+3]->IsInMode(mode)) return true;
+    return false;
+}
 
 void CheckDMAs(u32 cpu, u32 mode)
 {
@@ -1462,6 +1477,8 @@ u16 ARM9IORead16(u32 addr)
 
     case 0x04000204: return ExMemCnt[0];
     case 0x04000208: return IME[0];
+    case 0x04000210: return IE[0] & 0xFFFF;
+    case 0x04000212: return IE[0] >> 16;
 
     case 0x04000240: return GPU::VRAMCNT[0] | (GPU::VRAMCNT[1] << 8);
     case 0x04000242: return GPU::VRAMCNT[2] | (GPU::VRAMCNT[3] << 8);
@@ -1689,6 +1706,9 @@ void ARM9IOWrite16(u32 addr, u16 val)
 
     case 0x04000060: GPU3D::Write16(addr, val); return;
 
+    case 0x04000068:
+    case 0x0400006A: GPU::GPU2D_A->Write16(addr, val); return;
+
     case 0x040000B8: DMAs[0]->WriteCnt((DMAs[0]->Cnt & 0xFFFF0000) | val); return;
     case 0x040000BA: DMAs[0]->WriteCnt((DMAs[0]->Cnt & 0x0000FFFF) | (val << 16)); return;
     case 0x040000C4: DMAs[1]->WriteCnt((DMAs[1]->Cnt & 0xFFFF0000) | val); return;
@@ -1776,6 +1796,9 @@ void ARM9IOWrite16(u32 addr, u16 val)
         return;
 
     case 0x04000208: IME[0] = val & 0x1; return;
+    case 0x04000210: IE[0] = (IE[0] & 0xFFFF0000) | val; return;
+    case 0x04000212: IE[0] = (IE[0] & 0x0000FFFF) | (val << 16); return;
+    // TODO: what happens when writing to IF this way??
 
     case 0x04000240:
         GPU::MapVRAM_AB(0, val & 0xFF);
@@ -1837,7 +1860,8 @@ void ARM9IOWrite32(u32 addr, u32 val)
     switch (addr)
     {
     case 0x04000060: GPU3D::Write32(addr, val); return;
-    case 0x04000064: GPU::GPU2D_A->Write32(addr, val); return;
+    case 0x04000064:
+    case 0x04000068: GPU::GPU2D_A->Write32(addr, val); return;
 
     case 0x040000B0: DMAs[0]->SrcAddr = val; return;
     case 0x040000B4: DMAs[0]->DstAddr = val; return;
@@ -2084,6 +2108,8 @@ u16 ARM7IORead16(u32 addr)
 
     case 0x04000204: return ExMemCnt[1];
     case 0x04000208: return IME[1];
+    case 0x04000210: return IE[1] & 0xFFFF;
+    case 0x04000212: return IE[1] >> 16;
 
     case 0x04000300: return PostFlag7;
     case 0x04000304: return PowerControl7;
@@ -2345,6 +2371,9 @@ void ARM7IOWrite16(u32 addr, u16 val)
         return;
 
     case 0x04000208: IME[1] = val & 0x1; return;
+    case 0x04000210: IE[1] = (IE[1] & 0xFFFF0000) | val; return;
+    case 0x04000212: IE[1] = (IE[1] & 0x0000FFFF) | (val << 16); return;
+    // TODO: what happens when writing to IF this way??
 
     case 0x04000300:
         if (ARM7->R[15] >= 0x4000)

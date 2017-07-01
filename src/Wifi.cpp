@@ -400,9 +400,12 @@ void SendMPReply(u16 clienttime, u16 clientmask)
     IOPORT(W_TXSlotReply1) = 0;
 
     // this seems to be set upon IRQ0
-    // TODO: how does it behave if the packet addr is changed before it gets sent?
-    slot->Addr = (IOPORT(W_TXSlotReply2) & 0x0FFF) << 1;
-    *(u16*)&RAM[slot->Addr + 0x4] = 0x0001;
+    // TODO: how does it behave if the packet addr is changed before it gets sent? (maybe just not possible)
+    if (IOPORT(W_TXSlotReply2) & 0x8000)
+    {
+        slot->Addr = (IOPORT(W_TXSlotReply2) & 0x0FFF) << 1;
+        *(u16*)&RAM[slot->Addr + 0x4] = 0x0001;
+    }
 
     u16 clientnum = 0;
     for (int i = 1; i < IOPORT(W_AIDLow); i++)
@@ -585,8 +588,14 @@ bool ProcessTX(TXSlot* slot, int num)
                 *(u64*)&RAM[slot->Addr + 0xC + 24] = USCounter;
             }
 
-            *(u16*)&RAM[slot->Addr + 0xC + 22] = IOPORT(W_TXSeqNo) << 4;
-            IOPORT(W_TXSeqNo) = (IOPORT(W_TXSeqNo) + 1) & 0x0FFF;
+            //u32 noseqno = 0;
+            //if (num == 1) noseqno = (IOPORT(W_TXSlotCmd) & 0x4000);
+
+            //if (!noseqno)
+            {
+                *(u16*)&RAM[slot->Addr + 0xC + 22] = IOPORT(W_TXSeqNo) << 4;
+                IOPORT(W_TXSeqNo) = (IOPORT(W_TXSeqNo) + 1) & 0x0FFF;
+            }
 
             // set TX addr
             IOPORT(W_RXTXAddr) = slot->Addr >> 1;
@@ -614,7 +623,7 @@ bool ProcessTX(TXSlot* slot, int num)
             {
                 if (IOPORT(W_TXStatCnt) & 0x4000)
                 {
-                    IOPORT(W_TXStat) = 0x0801;
+                    IOPORT(W_TXStat) = 0x0800;
                     SetIRQ(1);
                 }
                 SetStatus(5);
@@ -952,6 +961,7 @@ void USTimer(u32 param)
         {
             // transfer finished, see if there's another slot to do
             // checkme: priority order of beacon/reply
+            // TODO: for CMD, check CMDCOUNT
             u16 txbusy = IOPORT(W_TXBusy);
             if      (txbusy & 0x0080) TXCurSlot = 5;
             else if (txbusy & 0x0010) TXCurSlot = 4;
@@ -969,7 +979,6 @@ void USTimer(u32 param)
     }
     if (ComStatus & 0x1)
     {
-        // TODO: make sure it isn't possible to send and receive at the same time
         RXTime--;
         if (!(RXTime & RXHalfwordTimeMask))
         {
