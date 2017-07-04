@@ -162,6 +162,9 @@ endif
 
 ifneq (,$(findstring msvc,$(platform)))
 LDFLAGS += $(LIBS)
+else
+CFLAGS += -D_CRT_SECURE_NO_WARNINGS
+CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
 endif
 
 ifeq ($(DEBUG), 1)
