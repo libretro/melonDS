@@ -183,6 +183,17 @@ OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
 CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
 
+OBJOUT   = -o
+LINKOUT  = -o 
+
+ifneq (,$(findstring msvc,$(platform)))
+	OBJOUT = -Fo
+	LINKOUT = -out:
+	LD = link.exe
+else
+	LD = $(CC)
+endif
+
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
