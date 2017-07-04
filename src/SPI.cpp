@@ -23,8 +23,10 @@
 #include "SPI.h"
 
 #ifdef __LIBRETRO__
+#include "boolean.h"
+
 extern char retro_base_directory[4096];
-extern char retro_firmware_status;
+extern bool retro_firmware_status;
 #endif
 
 namespace SPI_Firmware
