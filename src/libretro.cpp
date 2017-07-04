@@ -163,13 +163,12 @@ static retro_environment_t environ_cb;
 
 void retro_init(void)
 {
+   const char *dir = NULL;
+
    srand(time(NULL));
    frame_buf = (uint8_t*)malloc(VIDEO_PIXELS * sizeof(uint32_t));
-   const char *dir = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
-   {
-      snprintf(retro_base_directory, sizeof(retro_base_directory), "%s", dir);
-   }
+      sprintf(retro_base_directory, "%s", dir);
 }
 
 void retro_deinit(void)
@@ -565,7 +564,7 @@ bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
 
-   snprintf(retro_game_path, sizeof(retro_game_path), "%s", info->path);
+   sprintf(retro_game_path, "%s", info->path);
    NDS::Init();
    NDS::LoadROM(info->path, true);
 
