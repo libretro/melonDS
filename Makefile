@@ -161,8 +161,6 @@ else
 endif
 
 ifneq (,$(findstring msvc,$(platform)))
-LDFLAGS += $(LIBS)
-else
 CFLAGS += -D_CRT_SECURE_NO_WARNINGS
 CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
 endif
@@ -191,7 +189,7 @@ ifneq (,$(findstring msvc,$(platform)))
 	LINKOUT = -out:
 	LD = link.exe
 else
-	LD = $(CC)
+	LD = $(CXX)
 endif
 
 all: $(TARGET)
