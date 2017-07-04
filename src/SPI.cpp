@@ -95,7 +95,7 @@ void Reset()
     Firmware = NULL;
 #ifdef __LIBRETRO__
     char path[2047];
-    snprintf(path, sizeof(path), "%s/firmware.bin", retro_base_directory);
+    sprintf(path, "%s/firmware.bin", retro_base_directory);
     FILE* f = fopen(path, "rb");
     f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #else
