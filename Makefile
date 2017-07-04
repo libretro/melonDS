@@ -32,8 +32,7 @@ endif
 
 CORE_DIR    += .
 TARGET_NAME := melonds
-LIBM		    = -lm
-LIBTHREAD   :=
+LIBS		    = -lm
 
 ifeq ($(ARCHFLAGS),)
 ifeq ($(archs),ppc)
@@ -59,23 +58,23 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
-	#LIBTHREAD=-lpthread
+	#LIBS +=-lpthread
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T
-	LIBM :=
-	#LIBTHREAD=-lpthread
+	LIBS =
+	#LIBS +=-lpthread
 else ifneq (,$(findstring osx,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
-	#LIBTHREAD=-lpthread
+	#LIBS +=-lpthread
 else ifneq (,$(findstring ios,$(platform)))
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
 	fpic := -fPIC
 	SHARED := -dynamiclib
-	#LIBTHREAD=-lpthread
+	#LIBS +=-lpthread
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
@@ -94,7 +93,7 @@ else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
-	#LIBTHREAD=-lpthread
+	#LIBS +=-lpthread
 else ifeq ($(platform), emscripten)
    TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
@@ -106,6 +105,54 @@ else ifeq ($(platform), vita)
    AR = arm-vita-eabi-ar
    CXXFLAGS += -Wl,-q -Wall -O3 -fno-short-enums -fno-optimize-sibling-calls
 	STATIC_LINKING = 1
+# Windows MSVC 2010 x64
+else ifeq ($(platform), windows_msvc2010_x64)
+	CC  = cl.exe
+	CXX = cl.exe
+
+PATH := $(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../../VC/bin/amd64"):$(PATH)
+PATH := $(PATH):$(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../IDE")
+LIB := $(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../../VC/lib/amd64")
+INCLUDE := $(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../../VC/include")
+
+WindowsSdkDir := $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.0A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')lib/x64
+WindowsSdkDir ?= $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')lib/x64
+
+WindowsSdkDirInc := $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.0A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')Include
+WindowsSdkDirInc ?= $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')Include
+
+
+INCFLAGS_PLATFORM = -I"$(WindowsSdkDirInc)"
+export INCLUDE := $(INCLUDE)
+export LIB := $(LIB);$(WindowsSdkDir)
+TARGET := $(TARGET_NAME)_libretro.dll
+PSS_STYLE :=2
+LDFLAGS += -DLL
+LIBS =
+# Windows MSVC 2010 x86
+else ifeq ($(platform), windows_msvc2010_x86)
+	CC  = cl.exe
+	CXX = cl.exe
+
+PATH := $(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../../VC/bin"):$(PATH)
+PATH := $(PATH):$(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../IDE")
+LIB := $(shell IFS=$$'\n'; cygpath -w "$(VS100COMNTOOLS)../../VC/lib")
+INCLUDE := $(shell IFS=$$'\n'; cygpath "$(VS100COMNTOOLS)../../VC/include")
+
+WindowsSdkDir := $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.0A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')lib
+WindowsSdkDir ?= $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')lib
+
+WindowsSdkDirInc := $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.0A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')Include
+WindowsSdkDirInc ?= $(shell reg query "HKLM\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A" -v "InstallationFolder" | grep -o '[A-Z]:\\.*')Include
+
+
+INCFLAGS_PLATFORM = -I"$(WindowsSdkDirInc)"
+export INCLUDE := $(INCLUDE)
+export LIB := $(LIB);$(WindowsSdkDir)
+TARGET := $(TARGET_NAME)_libretro.dll
+PSS_STYLE :=2
+LDFLAGS += -DLL
+LIBS =
 else
    CC = gcc
    TARGET := $(TARGET_NAME)_libretro.dll
@@ -113,12 +160,14 @@ else
    LDFLAGS += -lws2_32
 endif
 
-LDFLAGS += $(LIBM) $(LIBTHREAD)
+ifneq (,$(findstring msvc,$(platform)))
+LDFLAGS += $(LIBS)
+endif
 
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g
 else
-   CXXFLAGS += -O3
+   CXXFLAGS += -O2 -DNDEBUG
 endif
 
 include Makefile.common
@@ -128,8 +177,8 @@ OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 #CFLAGS  += -DHAVE_THREADS
 #CXXFLAGS  += -DHAVE_THREADS
 
-CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
-CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS)
+CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
+CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
 
 all: $(TARGET)
 
@@ -137,11 +186,11 @@ $(TARGET): $(OBJECTS)
 ifeq ($(STATIC_LINKING), 1)
 	$(AR) rcs $@ $(OBJECTS)
 else
-	$(CXX) $(fpic) $(SHARED) $(INCLUDES) -o $@ $(OBJECTS) $(LDFLAGS)
+	$(LD) $(fpic) $(SHARED) $(INCLUDES) $(LINKOUT)$@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 endif
 
 %.o: %.c
-	$(CXX) $(CXXFLAGS) $(fpic) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(fpic) -c $(OBJOUT)$@ $<
 
 clean:
 	rm -f $(OBJECTS) $(TARGET)
