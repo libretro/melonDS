@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <algorithm>
 #include "NDS.h"
 #include "GPU.h"
 #include "FIFO.h"
@@ -203,7 +204,7 @@ s32 TexMatrix[16];
 s32 ClipMatrix[16];
 bool ClipMatrixDirty;
 
-s32 Viewport[4];
+u32 Viewport[6];
 
 s32 ProjMatrixStack[16];
 s32 PosMatrixStack[31][16];
@@ -248,6 +249,7 @@ u32 VertexNum;
 u32 VertexNumInPoly;
 u32 NumConsecutivePolygons;
 Polygon* LastStripPolygon;
+u32 NumOpaquePolygons;
 
 Vertex VertexRAM[6144 * 2];
 Polygon PolygonRAM[2048 * 2];
@@ -257,8 +259,7 @@ Polygon* CurPolygonRAM;
 u32 NumVertices, NumPolygons;
 u32 CurRAMBank;
 
-Vertex* RenderVertexRAM;
-Polygon* RenderPolygonRAM;
+std::array<Polygon*,2048> RenderPolygonRAM;
 u32 RenderNumPolygons;
 
 u32 FlushRequest;
@@ -338,6 +339,7 @@ void Reset()
     CurPolygonRAM = &PolygonRAM[0];
     NumVertices = 0;
     NumPolygons = 0;
+    NumOpaquePolygons = 0;
 
     // TODO: confirm initial polyid/color/fog values
     ClearAttr1 = 0x3F000000;
@@ -723,7 +725,6 @@ void SubmitPolygon()
     // clipping
 
     nverts = ClipPolygon<true>(clippedvertices, nverts, clipstart);
-
     if (nverts == 0)
     {
         LastStripPolygon = NULL;
@@ -754,6 +755,8 @@ void SubmitPolygon()
 
     poly->IsShadowMask = ((CurPolygonAttr & 0x3F000030) == 0x00000030);
     poly->IsShadow = ((CurPolygonAttr & 0x30) == 0x30) && !poly->IsShadowMask;
+
+    if (!poly->Translucent) NumOpaquePolygons++;
 
     if (LastStripPolygon && clipstart > 0)
     {
@@ -787,40 +790,21 @@ void SubmitPolygon()
         poly->NumVertices++;
 
         // viewport transform
-        s32 posX, posY, posZ;
+        s32 posX, posY;
         s32 w = vtx->Position[3];
         if (w == 0)
         {
             posX = 0;
             posY = 0;
-            posZ = 0;
-            w = 0x1000;
         }
         else
         {
-            // W is normalized, such that all the polygon's W values fit within 16 bits
-            // the viewport transform for X and Y uses the original W values, but
-            // the transform for Z uses the normalized W values
-            // W normalization is applied to separate polygons, even within strips
-
-            posX = (((s64)(vtx->Position[0] + w) * Viewport[2]) / (((s64)w) << 1)) + Viewport[0];
-            posY = (((s64)(-vtx->Position[1] + w) * Viewport[3]) / (((s64)w) << 1)) + Viewport[1];
-
-            //if (FlushAttributes & 0x2) posZ = w;
-            //else                       posZ = (((s64)vtx->Position[2] * 0x800000) / w) + 0x7FFEFF;
+            posX = (((s64)(vtx->Position[0] + w) * Viewport[4]) / (((s64)w) << 1)) + Viewport[0];
+            posY = (((s64)(-vtx->Position[1] + w) * Viewport[5]) / (((s64)w) << 1)) + Viewport[3];
         }
 
-        if      (posX < 0)        posX = 0;
-        else if (posX > 256)      posX = 256;
-        if      (posY < 0)        posY = 0;
-        else if (posY > 192)      posY = 192;
-        //if      (posZ < 0)        posZ = 0;
-        //else if (posZ > 0xFFFFFF) posZ = 0xFFFFFF;
-
-        vtx->FinalPosition[0] = posX;
-        vtx->FinalPosition[1] = posY;
-        //vtx->FinalPosition[2] = posZ;
-        //vtx->FinalPosition[3] = w;
+        vtx->FinalPosition[0] = posX & 0x1FF;
+        vtx->FinalPosition[1] = posY & 0xFF;
 
         vtx->FinalColor[0] = vtx->Color[0] >> 12;
         if (vtx->FinalColor[0]) vtx->FinalColor[0] = ((vtx->FinalColor[0] << 4) + 0xF);
@@ -832,13 +816,13 @@ void SubmitPolygon()
 
     // determine bounds of the polygon
     // also determine the W shift and normalize W
-    // TODO: normalization works both ways
+    // normalization works both ways
     // (ie two W's that span 12 bits or less will be brought to 16 bits)
 
     u32 vtop = 0, vbot = 0;
     s32 ytop = 192, ybot = 0;
     s32 xtop = 256, xbot = 0;
-    u32 wshift = 0;
+    u32 wsize = 0;
 
     for (int i = 0; i < nverts; i++)
     {
@@ -858,28 +842,48 @@ void SubmitPolygon()
         }
 
         u32 w = (u32)vtx->Position[3];
-        while ((w >> wshift) & 0xFFFF0000)
-            wshift += 4;
+        while ((w >> wsize) && (wsize < 32))
+            wsize += 4;
     }
 
     poly->VTop = vtop; poly->VBottom = vbot;
     poly->YTop = ytop; poly->YBottom = ybot;
     poly->XTop = xtop; poly->XBottom = xbot;
-    poly->WShift = wshift;
+
+    poly->SortKey = (ybot << 8) | ytop;
+    if (poly->Translucent) poly->SortKey |= 0x10000;
+
     poly->WBuffer = (FlushAttributes & 0x2);
 
     for (int i = 0; i < nverts; i++)
     {
         Vertex* vtx = poly->Vertices[i];
-        s32 w = vtx->Position[3] >> wshift;
+        s32 w, wshifted;
+
+        // W is normalized, such that all the polygon's W values fit within 16 bits
+        // the viewport transform for X/Y/Z uses the original W values, but
+        // when W-buffering is used, the normalized W is used
+        // W normalization is applied to separate polygons, even within strips
+
+        if (wsize < 16)
+        {
+            w = vtx->Position[3] << (16 - wsize);
+            wshifted = w >> (16 - wsize);
+        }
+        else
+        {
+            w = vtx->Position[3] >> (wsize - 16);
+            wshifted = w << (wsize - 16);
+        }
 
         s32 z;
         if (FlushAttributes & 0x2)
-            z = w << wshift;
+            z = wshifted;
+        else if (wshifted)
+            z = ((((s64)vtx->Position[2] * 0x4000) / vtx->Position[3]) + 0x3FFF) * 0x200;
         else
-            z = (((s64)vtx->Position[2] * 0x800000) / (w << wshift)) + 0x7FFEFF;
+            z = 0x3FFF;
 
-        // checkme
         if (z < 0) z = 0;
         else if (z > 0xFFFFFF) z = 0xFFFFFF;
 
@@ -1257,6 +1261,9 @@ void ExecuteCommand()
 
     if (ExecParamCount >= CmdNumParams[entry.Command])
     {
+        /*printf("0x%02X,  ", entry.Command);
+        for (int k = 0; k < ExecParamCount; k++) printf("0x%08X, ", ExecParams[k]);
+        printf("\n");*/
         CycleCount += CmdNumCycles[entry.Command];
         ExecParamCount = 0;
 
@@ -1344,7 +1351,7 @@ void ExecuteCommand()
 
                 if (PosMatrixStackPointer < 0 || PosMatrixStackPointer > 30)
                 {
-                    printf("!! POS MATRIX STACK UNDER/OVERFLOW %d\n", PosMatrixStackPointer);
+                    //printf("!! POS MATRIX STACK UNDER/OVERFLOW %d\n", PosMatrixStackPointer);
                     PosMatrixStackPointer += offset;
                     GXStat |= (1<<15);
                     break;
@@ -1711,10 +1718,12 @@ void ExecuteCommand()
 
         case 0x60: // viewport x1,y1,x2,y2
             // note: viewport Y coordinates are upside-down
-            Viewport[0] = ExecParams[0] & 0xFF;
-            Viewport[1] = 191 - (ExecParams[0] >> 24);
-            Viewport[2] = ((ExecParams[0] >> 16) & 0xFF) - Viewport[0] + 1;
-            Viewport[3] = (191 - ((ExecParams[0] >> 8) & 0xFF)) - Viewport[1] + 1;
+            Viewport[0] = ExecParams[0] & 0xFF;                             // x0
+            Viewport[1] = (191 - ((ExecParams[0] >> 8) & 0xFF)) & 0xFF;     // y0
+            Viewport[2] = (ExecParams[0] >> 16) & 0xFF;                     // x1
+            Viewport[3] = (191 - (ExecParams[0] >> 24)) & 0xFF;             // y1
+            Viewport[4] = (Viewport[2] - Viewport[0] + 1) & 0x1FF;          // width
+            Viewport[5] = (Viewport[1] - Viewport[3] + 1) & 0xFF;           // height
             break;
 
         case 0x70: // box test
@@ -1799,12 +1808,43 @@ void VCount144()
 }
 
 
+bool YSort(Polygon* a, Polygon* b)
+{
+    // polygon sorting rules:
+    // * opaque polygons come first
+    // * polygons with lower bottom Y come first
+    // * upon equal bottom Y, polygons with lower top Y come first
+    // * upon equal bottom AND top Y, original ordering is used
+    // the SortKey is calculated as to implement these rules
+
+    return a->SortKey < b->SortKey;
+}
+
 void VBlank()
 {
     if (FlushRequest)
     {
-        RenderVertexRAM = CurVertexRAM;
-        RenderPolygonRAM = CurPolygonRAM;
+        if (NumPolygons)
+        {
+            // separate translucent polygons from opaque ones
+
+            u32 io = 0, it = NumOpaquePolygons;
+            for (u32 i = 0; i < NumPolygons; i++)
+            {
+                Polygon* poly = &CurPolygonRAM[i];
+                if (poly->Translucent)
+                    RenderPolygonRAM[it++] = poly;
+                else
+                    RenderPolygonRAM[io++] = poly;
+            }
+
+            // apply Y-sorting
+
+            std::stable_sort(RenderPolygonRAM.begin(),
+                RenderPolygonRAM.begin() + ((FlushAttributes & 0x1) ? NumOpaquePolygons : NumPolygons),
+                YSort);
+        }
+
         RenderNumPolygons = NumPolygons;
 
         RenderDispCnt = DispCnt;
@@ -1828,6 +1868,7 @@ void VBlank()
 
         NumVertices = 0;
         NumPolygons = 0;
+        NumOpaquePolygons = 0;
 
         FlushRequest = 0;
     }

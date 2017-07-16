@@ -741,11 +741,9 @@ void TimerStart(u32 id, u16 cnt)
 
 
 
-void StartDiv()
+void DivDone(u32 param)
 {
-    // TODO: division isn't instant!
-
-    DivCnt &= ~0x2000;
+    DivCnt &= ~0xC000;
 
     switch (DivCnt & 0x0003)
     {
@@ -816,19 +814,26 @@ void StartDiv()
     }
 
     if ((DivDenominator[0] | DivDenominator[1]) == 0)
-        DivCnt |= 0x2000;
+        DivCnt |= 0x4000;
+}
+
+void StartDiv()
+{
+    NDS::CancelEvent(NDS::Event_Div);
+    DivCnt |= 0x8000;
+    NDS::ScheduleEvent(NDS::Event_Div, false, ((DivCnt&0x3)==0) ? 18:34, DivDone, 0);
 }
 
 // http://stackoverflow.com/questions/1100090/looking-for-an-efficient-integer-square-root-algorithm-for-arm-thumb2
-void StartSqrt()
+void SqrtDone(u32 param)
 {
-    // TODO: sqrt isn't instant either. oh well
-
     u64 val;
     u32 res = 0;
     u64 rem = 0;
     u32 prod = 0;
     u32 nbits, topshift;
+
+    SqrtCnt &= ~0x8000;
 
     if (SqrtCnt & 0x0001)
     {
@@ -858,6 +863,13 @@ void StartSqrt()
     }
 
     SqrtRes = res;
+}
+
+void StartSqrt()
+{
+    NDS::CancelEvent(NDS::Event_Sqrt);
+    SqrtCnt |= 0x8000;
+    NDS::ScheduleEvent(NDS::Event_Sqrt, false, 13, SqrtDone, 0);
 }
 
 
@@ -1487,8 +1499,30 @@ u16 ARM9IORead16(u32 addr)
     case 0x04000248: return GPU::VRAMCNT[7] | (GPU::VRAMCNT[8] << 8);
 
     case 0x04000280: return DivCnt;
+    case 0x04000290: return DivNumerator[0] & 0xFFFF;
+    case 0x04000292: return DivNumerator[0] >> 16;
+    case 0x04000294: return DivNumerator[1] & 0xFFFF;
+    case 0x04000296: return DivNumerator[1] >> 16;
+    case 0x04000298: return DivDenominator[0] & 0xFFFF;
+    case 0x0400029A: return DivDenominator[0] >> 16;
+    case 0x0400029C: return DivDenominator[1] & 0xFFFF;
+    case 0x0400029E: return DivDenominator[1] >> 16;
+    case 0x040002A0: return DivQuotient[0] & 0xFFFF;
+    case 0x040002A2: return DivQuotient[0] >> 16;
+    case 0x040002A4: return DivQuotient[1] & 0xFFFF;
+    case 0x040002A6: return DivQuotient[1] >> 16;
+    case 0x040002A8: return DivRemainder[0] & 0xFFFF;
+    case 0x040002AA: return DivRemainder[0] >> 16;
+    case 0x040002AC: return DivRemainder[1] & 0xFFFF;
+    case 0x040002AE: return DivRemainder[1] >> 16;
 
     case 0x040002B0: return SqrtCnt;
+    case 0x040002B4: return SqrtRes & 0xFFFF;
+    case 0x040002B6: return SqrtRes >> 16;
+    case 0x040002B8: return SqrtVal[0] & 0xFFFF;
+    case 0x040002BA: return SqrtVal[0] >> 16;
+    case 0x040002BC: return SqrtVal[1] & 0xFFFF;
+    case 0x040002BE: return SqrtVal[1] >> 16;
 
     case 0x04000300: return PostFlag9;
     case 0x04000304: return PowerControl9;

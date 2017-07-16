@@ -19,6 +19,8 @@
 #ifndef GPU3D_H
 #define GPU3D_H
 
+#include <array>
+
 namespace GPU3D
 {
 
@@ -45,7 +47,6 @@ typedef struct
 
     s32 FinalZ[10];
     s32 FinalW[10];
-    u8 WShift;
     bool WBuffer;
 
     u32 Attr;
@@ -58,11 +59,11 @@ typedef struct
     bool IsShadowMask;
     bool IsShadow;
 
-    // data below rather specific to the software renderer
-
     u32 VTop, VBottom; // vertex indices
     s32 YTop, YBottom; // Y coords
     s32 XTop, XBottom; // associated X coords
+
+    u32 SortKey;
 
 } Polygon;
 
@@ -77,8 +78,7 @@ extern u8 RenderFogDensityTable[34];
 
 extern u32 RenderClearAttr1, RenderClearAttr2;
 
-extern Vertex* RenderVertexRAM;
-extern Polygon* RenderPolygonRAM;
+extern std::array<Polygon*,2048> RenderPolygonRAM;
 extern u32 RenderNumPolygons;
 
 bool Init();
