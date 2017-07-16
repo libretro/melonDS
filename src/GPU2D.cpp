@@ -934,7 +934,7 @@ void GPU2D::DrawScanlineBGMode6(u32 line, u32* spritebuf, u32* dst)
         {
             if (DispCnt & 0x0400)
             {
-                printf("GPU2D: MODE6 LARGE BG TODO\n");
+                DrawBG_Large(line, dst);
             }
         }
         if ((BGCnt[0] & 0x3) == i)
@@ -1005,11 +1005,18 @@ void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
         u32 coloreffect, eva, evb;
 
         u32 flag1 = val1 >> 24;
+        u32 flag2 = val2 >> 24;
+
+        u32 target2;
+        if (flag2 & 0x80)      target2 = 0x1000;
+        else if (flag2 & 0x40) target2 = 0x0100;
+        else                   target2 = flag2 << 8;
+
         if (!(windowmask[i] & 0x20))
         {
             coloreffect = 0;
         }
-        else if ((flag1 & 0x80) && (BlendCnt & ((val2 >> 16) & 0xFF00)))
+        else if ((flag1 & 0x80) && (BlendCnt & target2))
         {
             // sprite blending
 
@@ -1026,7 +1033,7 @@ void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
                 evb = EVB;
             }
         }
-        else if ((flag1 & 0x40) && (BlendCnt & ((val2 >> 16) & 0xFF00)))
+        else if ((flag1 & 0x40) && (BlendCnt & target2))
         {
             // 3D layer blending
 
@@ -1054,7 +1061,7 @@ void GPU2D::DrawScanline_Mode1(u32 line, u32* dst)
         }
         else if (BlendCnt & flag1)
         {
-            if ((bldcnteffect == 1) && (BlendCnt & ((val2 >> 16) & 0xFF00)))
+            if ((bldcnteffect == 1) && (BlendCnt & target2))
             {
                 coloreffect = 1;
                 eva = EVA;
@@ -1387,20 +1394,6 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
     u16* pal;
     u32 extpal;
 
-    u32 coordmask;
-    u32 yshift;
-    switch (bgcnt & 0xC000)
-    {
-    case 0x0000: coordmask = 0x07800; yshift = 7; break;
-    case 0x4000: coordmask = 0x0F800; yshift = 8; break;
-    case 0x8000: coordmask = 0x1F800; yshift = 9; break;
-    case 0xC000: coordmask = 0x3F800; yshift = 10; break;
-    }
-
-    u32 overflowmask;
-    if (bgcnt & 0x2000) overflowmask = 0;
-    else                overflowmask = ~(coordmask | 0x7FF);
-
     extpal = (DispCnt & 0x40000000);
 
     s16 rotA = BGRotA[bgnum-2];
@@ -1415,10 +1408,30 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
     {
         // bitmap modes
 
+        u32 xmask, ymask;
+        u32 yshift;
+        switch (bgcnt & 0xC000)
+        {
+        case 0x0000: xmask = 0x07FFF; ymask = 0x07FFF; yshift = 7; break;
+        case 0x4000: xmask = 0x0FFFF; ymask = 0x0FFFF; yshift = 8; break;
+        case 0x8000: xmask = 0x1FFFF; ymask = 0x0FFFF; yshift = 9; break;
+        case 0xC000: xmask = 0x1FFFF; ymask = 0x1FFFF; yshift = 9; break;
+        }
+
+        u32 ofxmask, ofymask;
+        if (bgcnt & 0x2000)
+        {
+            ofxmask = 0;
+            ofymask = 0;
+        }
+        else
+        {
+            ofxmask = ~xmask;
+            ofymask = ~ymask;
+        }
+
         if (Num) tilemapaddr = 0x06200000 + ((bgcnt & 0x1F00) << 6);
         else     tilemapaddr = 0x06000000 + ((bgcnt & 0x1F00) << 6);
-
-        coordmask |= 0x7FF;
 
         if (bgcnt & 0x0004)
         {
@@ -1426,9 +1439,9 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
 
             for (int i = 0; i < 256; i++)
             {
-                if ((!((rotX|rotY) & overflowmask)) && (windowmask[i] & (1<<bgnum)))
+                if (!(rotX & ofxmask) && !(rotY & ofymask) && (windowmask[i] & (1<<bgnum)))
                 {
-                    u16 color = GPU::ReadVRAM_BG<u16>(tilemapaddr + (((((rotY & coordmask) >> 8) << yshift) + ((rotX & coordmask) >> 8)) << 1));
+                    u16 color = GPU::ReadVRAM_BG<u16>(tilemapaddr + (((((rotY & ymask) >> 8) << yshift) + ((rotX & xmask) >> 8)) << 1));
 
                     if (color & 0x8000)
                         DrawPixel(&dst[i], color, 0x01000000<<bgnum);
@@ -1447,9 +1460,9 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
 
             for (int i = 0; i < 256; i++)
             {
-                if ((!((rotX|rotY) & overflowmask)) && (windowmask[i] & (1<<bgnum)))
+                if (!(rotX & ofxmask) && !(rotY & ofymask) && (windowmask[i] & (1<<bgnum)))
                 {
-                    u8 color = GPU::ReadVRAM_BG<u8>(tilemapaddr + (((rotY & coordmask) >> 8) << yshift) + ((rotX & coordmask) >> 8));
+                    u8 color = GPU::ReadVRAM_BG<u8>(tilemapaddr + (((rotY & ymask) >> 8) << yshift) + ((rotX & xmask) >> 8));
 
                     if (color)
                         DrawPixel(&dst[i], pal[color], 0x01000000<<bgnum);
@@ -1463,6 +1476,20 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
     else
     {
         // mixed affine/text mode
+
+        u32 coordmask;
+        u32 yshift;
+        switch (bgcnt & 0xC000)
+        {
+        case 0x0000: coordmask = 0x07800; yshift = 7; break;
+        case 0x4000: coordmask = 0x0F800; yshift = 8; break;
+        case 0x8000: coordmask = 0x1F800; yshift = 9; break;
+        case 0xC000: coordmask = 0x3F800; yshift = 10; break;
+        }
+
+        u32 overflowmask;
+        if (bgcnt & 0x2000) overflowmask = 0;
+        else                overflowmask = ~(coordmask | 0x7FF);
 
         if (Num)
         {
@@ -1514,6 +1541,70 @@ void GPU2D::DrawBG_Extended(u32 line, u32* dst, u32 bgnum)
 
     BGXRefInternal[bgnum-2] += rotB;
     BGYRefInternal[bgnum-2] += rotD;
+}
+
+void GPU2D::DrawBG_Large(u32 line, u32* dst) // BG is always BG2
+{
+    u8* windowmask = (u8*)&dst[256*2];
+    u16 bgcnt = BGCnt[2];
+
+    u32 tilesetaddr, tilemapaddr;
+    u16* pal;
+
+    u32 xmask, ymask;
+    u32 yshift;
+    switch (bgcnt & 0xC000)
+    {
+    case 0x0000: xmask = 0x1FFFF; ymask = 0x3FFFF; yshift = 9; break;
+    case 0x4000: xmask = 0x3FFFF; ymask = 0x1FFFF; yshift = 10; break;
+    case 0x8000: // TODO (most likely the second size bit is just ignored)
+    case 0xC000: printf("bad BG size for large BG: %04X\n", bgcnt); return;
+    }
+
+    u32 ofxmask, ofymask;
+    if (bgcnt & 0x2000)
+    {
+        ofxmask = 0;
+        ofymask = 0;
+    }
+    else
+    {
+        ofxmask = ~xmask;
+        ofymask = ~ymask;
+    }
+
+    s16 rotA = BGRotA[0];
+    s16 rotB = BGRotB[0];
+    s16 rotC = BGRotC[0];
+    s16 rotD = BGRotD[0];
+
+    s32 rotX = BGXRefInternal[0];
+    s32 rotY = BGYRefInternal[0];
+
+    if (Num) tilemapaddr = 0x06200000;
+    else     tilemapaddr = 0x06000000;
+
+    // 256-color bitmap
+
+    if (Num) pal = (u16*)&GPU::Palette[0x400];
+    else     pal = (u16*)&GPU::Palette[0];
+
+    for (int i = 0; i < 256; i++)
+    {
+        if (!(rotX & ofxmask) && !(rotY & ofymask) && (windowmask[i] & (1<<2)))
+        {
+            u8 color = GPU::ReadVRAM_BG<u8>(tilemapaddr + (((rotY & ymask) >> 8) << yshift) + ((rotX & xmask) >> 8));
+
+            if (color)
+                DrawPixel(&dst[i], pal[color], 0x01000000<<2);
+        }
+
+        rotX += rotA;
+        rotY += rotC;
+    }
+
+    BGXRefInternal[0] += rotB;
+    BGYRefInternal[0] += rotD;
 }
 
 void GPU2D::InterleaveSprites(u32* buf, u32 prio, u32* dst)
@@ -1745,6 +1836,7 @@ void GPU2D::DrawSprite_Rotscale(u16* attrib, u16* rotparams, u32 boundwidth, u32
             if (DispCnt & 0x20)
             {
                 // TODO ("reserved")
+                printf("bad reserved mode\n");
             }
             else
             {
@@ -1772,7 +1864,7 @@ void GPU2D::DrawSprite_Rotscale(u16* attrib, u16* rotparams, u32 boundwidth, u32
         {
             if ((u32)rotX < width && (u32)rotY < height)
             {
-                u8 color = GPU::ReadVRAM_OBJ<u16>(pixelsaddr + ((rotY >> 8) * ytilefactor) + ((rotX >> 8) << 1));
+                u16 color = GPU::ReadVRAM_OBJ<u16>(pixelsaddr + ((rotY >> 8) * ytilefactor) + ((rotX >> 8) << 1));
 
                 if (color & 0x8000)
                 {
@@ -1916,6 +2008,7 @@ void GPU2D::DrawSprite_Normal(u16* attrib, u32 width, s32 xpos, u32 ypos, u32* d
             if (DispCnt & 0x20)
             {
                 // TODO ("reserved")
+                printf("bad reserved mode\n");
             }
             else
             {

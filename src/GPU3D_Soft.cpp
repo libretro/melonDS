@@ -46,10 +46,12 @@ u32 AttrBuffer[BufferSize * 2];
 
 // attribute buffer:
 // bit0-3: edge flags (left/right/top/bottom)
+// bit4: backfacing flag
 // bit8-12: antialiasing alpha
 // bit15: fog enable
-// bit24-29: polygon ID
-// bit30: translucent flag
+// bit16-21: polygon ID for translucent pixels
+// bit22: translucent flag
+// bit24-29: polygon ID for opaque pixels
 
 u8 StencilBuffer[256*2];
 bool PrevIsShadowMask;
@@ -180,6 +182,9 @@ public:
         this->x = x;
         if (xdiff != 0 && wdiff != 0)
         {
+            // TODO: hardware tests show that this method is too precise
+            // I haven't yet figured out what the hardware does, though
+
             s64 num = ((s64)x << (shift + 40)) / w1factor;
             s64 denw0 = ((s64)(xdiff-x) << 40) / w0factor;
             s64 denw1 = num >> shift;
@@ -196,22 +201,46 @@ public:
 
     s32 Interpolate(s32 y0, s32 y1)
     {
-        if (xdiff == 0) return y0;
+        if (xdiff == 0 || y0 == y1) return y0;
 
         if (wdiff != 0)
-            return y0 + (((y1 - y0) * yfactor) >> shift);
+        {
+            // perspective-correct approx. interpolation
+            if (y0 < y1)
+                return y0 + (((y1-y0) * yfactor) >> shift);
+            else
+                return y1 + (((y0-y1) * ((1<<shift)-yfactor)) >> shift);
+        }
         else
-            return y0 + (((y1 - y0) * x) / xdiff);
+        {
+            // linear interpolation
+            if (y0 < y1)
+                return y0 + (((y1-y0) * x) / xdiff);
+            else
+                return y1 + (((y0-y1) * (xdiff-x)) / xdiff);
+        }
     }
 
     s32 InterpolateZ(s32 z0, s32 z1, bool wbuffer)
     {
-        if (xdiff == 0) return z0;
+        if (xdiff == 0 || z0 == z1) return z0;
 
         if ((wdiff != 0) && wbuffer)
-            return z0 + (((s64)(z1 - z0) * yfactor) >> shift);
+        {
+            // perspective-correct approx. interpolation
+            if (z0 < z1)
+                return z0 + (((s64)(z1-z0) * yfactor) >> shift);
+            else
+                return z1 + (((s64)(z0-z1) * ((1<<shift)-yfactor)) >> shift);
+        }
         else
-            return z0 + (((s64)(z1 - z0) * x) / xdiff);
+        {
+            // linear interpolation
+            if (z0 < z1)
+                return z0 + (((s64)(z1-z0) * x) / xdiff);
+            else
+                return z1 + (((s64)(z0-z1) * (xdiff-x)) / xdiff);
+        }
     }
 
 private:
@@ -655,18 +684,39 @@ void TextureLookup(u32 texparam, u32 texpal, s16 s, s16 t, u16* color, u8* alpha
     }
 }
 
-template<bool func_equal>
-bool DepthTest(s32 oldz, s32 z)
+// depth test is 'less or equal' instead of 'less than' under the following conditions:
+// * when drawing a front-facing pixel over an opaque back-facing pixel
+// * when drawing wireframe edges, under certain conditions (TODO)
+
+bool DepthTest_Equal(s32 dstz, s32 z, u32 dstattr)
 {
-    if (func_equal)
+    s32 diff = dstz - z;
+    if ((u32)(diff + 0xFF) <= 0x1FE) // range is +-0xFF
+        return true;
+
+    return false;
+}
+
+bool DepthTest_LessThan(s32 dstz, s32 z, u32 dstattr)
+{
+    if (z < dstz)
+        return true;
+
+    return false;
+}
+
+bool DepthTest_LessThan_FrontFacing(s32 dstz, s32 z, u32 dstattr)
+{
+    if ((dstattr & 0x00400010) == 0x00000010) // opaque, back facing
     {
-        s32 diff = oldz - z;
-        if ((u32)(diff + 0xFF) <= 0x1FE) // range is +-0xFF
+        if (z <= dstz)
             return true;
     }
     else
-    if (z < oldz)
-        return true;
+    {
+        if (z < dstz)
+            return true;
+    }
 
     return false;
 }
@@ -920,14 +970,19 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 {
     Polygon* polygon = rp->PolyData;
 
+    u32 polyattr = (polygon->Attr & 0x3F008000);
+    if (!polygon->FacingView) polyattr |= (1<<4);
+
     u32 polyalpha = (polygon->Attr >> 16) & 0x1F;
     bool wireframe = (polyalpha == 0);
 
-    bool (*fnDepthTest)(s32 oldz, s32 z);
+    bool (*fnDepthTest)(s32 dstz, s32 z, u32 dstattr);
     if (polygon->Attr & (1<<14))
-        fnDepthTest = DepthTest<true>;
+        fnDepthTest = DepthTest_Equal;
+    else if (polygon->FacingView)
+        fnDepthTest = DepthTest_LessThan_FrontFacing;
     else
-        fnDepthTest = DepthTest<false>;
+        fnDepthTest = DepthTest_LessThan;
 
     if (polygon->IsShadowMask && !PrevIsShadowMask)
         memset(&StencilBuffer[256 * (y&0x1)], 0, 256);
@@ -1049,13 +1104,15 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
     Interpolator interpX(xstart, xend+1, wl, wr, 8);
 
     if (x < 0) x = 0;
+    s32 xlimit;
 
     // part 1: left edge
     edge = yedge | 0x1;
-    for (; x < xstart+l_edgelen; x++)
+    xlimit = xstart+l_edgelen; if (xlimit > 256) xlimit = 256;
+    for (; x < xlimit; x++)
     {
         u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
-        u32 attr = (polygon->Attr & 0x3F008000);
+        u32 attr;
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1067,6 +1124,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         interpX.SetX(x);
 
         s32 z = interpX.InterpolateZ(zl, zr, polygon->WBuffer);
+        u32 dstattr = AttrBuffer[pixeladdr];
 
         if (polygon->IsShadowMask)
         {
@@ -1083,22 +1141,21 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
                 }
             }
 
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 StencilBuffer[256*(y&0x1) + x] = 1;
 
             continue;
         }
 
-        u32 dstattr = AttrBuffer[pixeladdr];
-
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
-        if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+        if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
         {
             if (!(dstattr & 0x3)) continue;
 
             pixeladdr += BufferSize;
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            dstattr = AttrBuffer[pixeladdr];
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 continue;
         }
 
@@ -1117,7 +1174,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
-            attr |= edge;
+            attr = polyattr | edge;
 
             if (RenderDispCnt & (1<<4))
             {
@@ -1157,12 +1214,28 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         }
         else
         {
-            attr |= (1<<30);
-            if (polygon->IsShadow) dstattr |= (1<<30);
+            attr = (polyattr & 0xFFF0) | ((polyattr >> 8) & 0xFF0000) | (1<<22) | (dstattr & 0xFF00000F);
 
-            // skip if polygon IDs are equal
-            if ((dstattr & 0x7F000000) == (attr & 0x7F000000))
-                continue;
+            if (polygon->IsShadow)
+            {
+                // for shadows, opaque pixels are also checked
+                if (dstattr & (1<<22))
+                {
+                    if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                        continue;
+                }
+                else
+                {
+                    if ((dstattr & 0x3F000000) == (polyattr & 0x3F000000))
+                        continue;
+                }
+            }
+            else
+            {
+                // skip if polygon IDs are equal
+                if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                    continue;
+            }
 
             // fog flag
             if (!(dstattr & (1<<15)))
@@ -1180,11 +1253,12 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
     // part 2: polygon inside
     edge = yedge;
-    if (wireframe && !edge) x = xend-r_edgelen+1;
-    else for (; x <= xend-r_edgelen; x++)
+    xlimit = xend-r_edgelen+1; if (xlimit > 256) xlimit = 256;
+    if (wireframe && !edge) x = xlimit;
+    else for (; x < xlimit; x++)
     {
         u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
-        u32 attr = (polygon->Attr & 0x3F008000);
+        u32 attr;
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1196,28 +1270,28 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         interpX.SetX(x);
 
         s32 z = interpX.InterpolateZ(zl, zr, polygon->WBuffer);
+        u32 dstattr = AttrBuffer[pixeladdr];
 
         if (polygon->IsShadowMask)
         {
             // for shadow masks: set stencil bits where the depth test fails.
             // draw nothing.
 
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 StencilBuffer[256*(y&0x1) + x] = 1;
 
             continue;
         }
 
-        u32 dstattr = AttrBuffer[pixeladdr];
-
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
-        if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+        if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
         {
             if (!(dstattr & 0x3)) continue;
 
             pixeladdr += BufferSize;
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            dstattr = AttrBuffer[pixeladdr];
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 continue;
         }
 
@@ -1236,23 +1310,33 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
-            attr |= edge;
+            attr = polyattr | edge;
             DepthBuffer[pixeladdr] = z;
         }
         else
         {
-            u32 dstattr = AttrBuffer[pixeladdr];
-            attr |= (1<<30);
-            if (polygon->IsShadow) dstattr |= (1<<30);
+            attr = (polyattr & 0xFFF0) | ((polyattr >> 8) & 0xFF0000) | (1<<22) | (dstattr & 0xFF00000F);
 
-            // skip if polygon IDs are equal
-            // note: this only happens if the destination pixel was translucent
-            // or always when drawing a shadow
-            // (the GPU keeps track of which pixels are translucent, regardless of
-            // the destination alpha)
-            // TODO: they say that there are two separate polygon ID buffers. verify that.
-            if ((dstattr & 0x7F000000) == (attr & 0x7F000000))
-                continue;
+            if (polygon->IsShadow)
+            {
+                // for shadows, opaque pixels are also checked
+                if (dstattr & (1<<22))
+                {
+                    if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                        continue;
+                }
+                else
+                {
+                    if ((dstattr & 0x3F000000) == (polyattr & 0x3F000000))
+                        continue;
+                }
+            }
+            else
+            {
+                // skip if polygon IDs are equal
+                if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                    continue;
+            }
 
             // fog flag
             if (!(dstattr & (1<<15)))
@@ -1268,14 +1352,13 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         AttrBuffer[pixeladdr] = attr;
     }
 
-    if (xend > 255) xend = 255;
-
     // part 3: right edge
     edge = yedge | 0x2;
-    for (; x <= xend; x++)
+    xlimit = xend+1; if (xlimit > 256) xlimit = 256;
+    for (; x < xlimit; x++)
     {
         u32 pixeladdr = FirstPixelOffset + (y*ScanlineWidth) + x;
-        u32 attr = (polygon->Attr & 0x3F008000);
+        u32 attr;
 
         // check stencil buffer for shadows
         if (polygon->IsShadow)
@@ -1287,6 +1370,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         interpX.SetX(x);
 
         s32 z = interpX.InterpolateZ(zl, zr, polygon->WBuffer);
+        u32 dstattr = AttrBuffer[pixeladdr];
 
         if (polygon->IsShadowMask)
         {
@@ -1303,22 +1387,21 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
                 }
             }
 
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 StencilBuffer[256*(y&0x1) + x] = 1;
 
             continue;
         }
 
-        u32 dstattr = AttrBuffer[pixeladdr];
-
         // if depth test against the topmost pixel fails, test
         // against the pixel underneath
-        if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+        if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
         {
             if (!(dstattr & 0x3)) continue;
 
             pixeladdr += BufferSize;
-            if (!fnDepthTest(DepthBuffer[pixeladdr], z))
+            dstattr = AttrBuffer[pixeladdr];
+            if (!fnDepthTest(DepthBuffer[pixeladdr], z, dstattr))
                 continue;
         }
 
@@ -1337,7 +1420,7 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
 
         if (alpha == 31)
         {
-            attr |= edge;
+            attr = polyattr | edge;
 
             if (RenderDispCnt & (1<<4))
             {
@@ -1377,12 +1460,28 @@ void RenderPolygonScanline(RendererPolygon* rp, s32 y)
         }
         else
         {
-            attr |= (1<<30);
-            if (polygon->IsShadow) dstattr |= (1<<30);
+            attr = (polyattr & 0xFFF0) | ((polyattr >> 8) & 0xFF0000) | (1<<22) | (dstattr & 0xFF00000F);
 
-            // skip if polygon IDs are equal
-            if ((dstattr & 0x7F000000) == (attr & 0x7F000000))
-                continue;
+            if (polygon->IsShadow)
+            {
+                // for shadows, opaque pixels are also checked
+                if (dstattr & (1<<22))
+                {
+                    if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                        continue;
+                }
+                else
+                {
+                    if ((dstattr & 0x3F000000) == (polyattr & 0x3F000000))
+                        continue;
+                }
+            }
+            else
+            {
+                // skip if polygon IDs are equal
+                if ((dstattr & 0x007F0000) == (attr & 0x007F0000))
+                    continue;
+            }
 
             // fog flag
             if (!(dstattr & (1<<15)))
@@ -1433,7 +1532,7 @@ void ScanlineFinalPass(s32 y)
             u32 attr = AttrBuffer[pixeladdr];
             if (!(attr & 0xF)) continue;
 
-            u32 polyid = attr >> 24;
+            u32 polyid = attr >> 24; // opaque polygon IDs are used for edgemarking
             u32 z = DepthBuffer[pixeladdr];
 
             if (((polyid != (AttrBuffer[pixeladdr-1] >> 24)) && (z < DepthBuffer[pixeladdr-1])) ||
@@ -1492,15 +1591,19 @@ void ScanlineFinalPass(s32 y)
                 }
                 else
                 {
-                    z = (z - fogoffset) << fogshift;
-                    densityid = z >> 19;
+                    // technically: Z difference is shifted left by fog shift
+                    // then bit 0-18 are the fractional part and bit 19-23 are the density index
+                    // things are a little different here to avoid overflow in 32-bit range
+
+                    z -= fogoffset;
+                    densityid = z >> (19-fogshift);
                     if (densityid >= 32)
                     {
                         densityid = 32;
                         densityfrac = 0;
                     }
                     else
-                        densityfrac = z & 0x7FFFF;
+                        densityfrac = (z << fogshift) & 0x7FFFF;
                 }
 
                 // checkme
@@ -1587,7 +1690,7 @@ void ScanlineFinalPass(s32 y)
 void ClearBuffers()
 {
     u32 clearz = ((RenderClearAttr2 & 0x7FFF) * 0x200) + 0x1FF;
-    u32 polyid = RenderClearAttr1 & 0x3F000000;
+    u32 polyid = RenderClearAttr1 & 0x3F000000; // this sets the opaque polygonID
 
     // fill screen borders for edge marking
 
@@ -1673,29 +1776,22 @@ void ClearBuffers()
     }
 }
 
-void RenderPolygons(bool threaded, Polygon* polygons, int npolys)
+void RenderPolygons(bool threaded, Polygon** polygons, int npolys)
 {
-    // sort polygons
-    // TODO: Y-sorting for translucent polygons
-    // TODO: all sorting should be done in GPU3D.cpp
+    // polygons with ybottom>192 aren't rendered at all
 
     int j = 0;
     for (int i = 0; i < npolys; i++)
     {
-        if (polygons[i].Translucent) continue;
-        SetupPolygon(&PolygonList[j++], &polygons[i]);
-    }
-    for (int i = 0; i < npolys; i++)
-    {
-        if (!polygons[i].Translucent) continue;
-        SetupPolygon(&PolygonList[j++], &polygons[i]);
+        if (polygons[i]->YBottom > 192) continue;
+        SetupPolygon(&PolygonList[j++], polygons[i]);
     }
 
-    RenderScanline(0, npolys);
+    RenderScanline(0, j);
 
     for (s32 y = 1; y < 192; y++)
     {
-        RenderScanline(y, npolys);
+        RenderScanline(y, j);
         ScanlineFinalPass(y-1);
 
         if (threaded)
@@ -1723,7 +1819,7 @@ void RenderFrame()
     else
     {
         ClearBuffers();
-        RenderPolygons(false, RenderPolygonRAM, RenderNumPolygons);
+        RenderPolygons(false, &RenderPolygonRAM[0], RenderNumPolygons);
     }
 }
 
@@ -1736,7 +1832,7 @@ void RenderThreadFunc()
 
         RenderThreadRendering = true;
         ClearBuffers();
-        RenderPolygons(true, RenderPolygonRAM, RenderNumPolygons);
+        RenderPolygons(true, &RenderPolygonRAM[0], RenderNumPolygons);
 
         Platform::Semaphore_Post(Sema_RenderDone);
         RenderThreadRendering = false;

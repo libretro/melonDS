@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
+set(CMAKE_CXX_STANDARD 11)
+
 SET(PROJECT_WX melonDS)
 PROJECT(${PROJECT_WX})
 
