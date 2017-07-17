@@ -34,6 +34,12 @@ CORE_DIR    += .
 TARGET_NAME := melonds
 LIBS		    = -lm
 
+# GIT HASH
+GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+ifneq ($(GIT_VERSION)," unknown")
+   DEFINES += -DGIT_VERSION=\"$(GIT_VERSION)\"
+endif
+
 ifeq ($(ARCHFLAGS),)
 ifeq ($(archs),ppc)
    ARCHFLAGS = -arch ppc -arch ppc64
