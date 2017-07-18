@@ -33,6 +33,13 @@ endif
 CORE_DIR    += .
 TARGET_NAME := melonds
 LIBS		    = -lm
+DEFINES :=
+
+# GIT HASH
+GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+ifneq ($(GIT_VERSION)," unknown")
+   DEFINES += -DGIT_VERSION=\"$(GIT_VERSION)\"
+endif
 
 ifeq ($(ARCHFLAGS),)
 ifeq ($(archs),ppc)
@@ -80,7 +87,7 @@ ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
 endif
 
-	DEFINES := -DIOS
+	DEFINES += -DIOS
 	CC = cc -arch armv7 -isysroot $(IOSSDK)
 ifeq ($(platform),ios9)
 CC     += -miphoneos-version-min=8.0
