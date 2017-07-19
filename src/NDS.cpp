@@ -30,6 +30,12 @@
 #include "RTC.h"
 #include "Wifi.h"
 
+#if defined(_WIN32)
+char platformDirSeparator = '\\';
+#else
+char platformDirSeparator = '/';
+#endif
+
 #ifdef __LIBRETRO__
 #include <streams\file_stream_transforms.h>
 
@@ -252,7 +258,7 @@ void Reset()
 
 #ifdef __LIBRETRO__
     char path[2048];
-    sprintf(path, "%s/bios9.bin", retro_base_directory);
+    sprintf(path, "%s%cbios9.bin", retro_base_directory, platformDirSeparator);
     f = fopen(path, "rb");
     if (f)
        retro_firmware_status = true;
@@ -278,7 +284,7 @@ void Reset()
     }
 
 #ifdef __LIBRETRO__
-    sprintf(path, "%s/bios7.bin", retro_base_directory);
+    sprintf(path, "%s%cbios7.bin", retro_base_directory, platformDirSeparator);
     f = fopen(path, "rb");
     if (f)
        retro_firmware_status = true;
