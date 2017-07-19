@@ -418,7 +418,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->geometry.base_height  = VIDEO_HEIGHT;
    info->geometry.max_width    = VIDEO_WIDTH;
    info->geometry.max_height   = VIDEO_HEIGHT;
-   info->geometry.aspect_ratio = 0.0f;
+   info->geometry.aspect_ratio = (float)VIDEO_WIDTH / (float)VIDEO_HEIGHT;
 }
 
 static struct retro_rumble_interface rumble;
