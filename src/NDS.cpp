@@ -31,6 +31,8 @@
 #include "Wifi.h"
 
 #ifdef __LIBRETRO__
+#include <streams\file_stream_transforms.h>
+
 extern char retro_base_directory[4096];
 extern char retro_game_path[4096];
 extern bool retro_firmware_status;

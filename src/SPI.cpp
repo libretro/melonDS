@@ -24,6 +24,7 @@
 
 #ifdef __LIBRETRO__
 #include "boolean.h"
+#include <streams\file_stream_transforms.h>
 
 extern char retro_base_directory[4096];
 extern bool retro_firmware_status;
