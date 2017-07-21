@@ -3,7 +3,8 @@ INCFLAGS    := -I$(CORE_DIR)/libretro-common/include
 SOURCES_C   :=
 
 #SOURCES_C  += \
-					$(CORE_DIR)/libretro-common/rthreads/rthreads.c
+					$(CORE_DIR)/libretro-common/rthreads/rthreads.c \
+					$(CORE_DIR)/libretro-common/streams/file_stream.c
 
 SOURCES_CXX := $(CORE_DIR)/src/NDS.cpp \
 					$(CORE_DIR)/src/ARM.cpp \
