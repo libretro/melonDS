@@ -28,4 +28,6 @@ typedef signed short        s16;
 typedef signed int          s32;
 typedef signed long long int     s64;
 
+extern char platformDirSeparator;
+
 #endif // TYPES_H

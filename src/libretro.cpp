@@ -418,7 +418,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->geometry.base_height  = VIDEO_HEIGHT;
    info->geometry.max_width    = VIDEO_WIDTH;
    info->geometry.max_height   = VIDEO_HEIGHT;
-   info->geometry.aspect_ratio = 0.0f;
+   info->geometry.aspect_ratio = (float)VIDEO_WIDTH / (float)VIDEO_HEIGHT;
 }
 
 static struct retro_rumble_interface rumble;
@@ -482,6 +482,8 @@ void retro_reset(void)
 
 static void update_input(void)
 {
+   input_poll_cb();
+
    uint16_t keys = 0;
    keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A)) << 0;
    keys |= (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B)) << 1;
