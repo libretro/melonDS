@@ -91,7 +91,13 @@ private:
     bool Win0Active;
     bool Win1Active;
 
+    u8 BGMosaicSize[2];
+    u8 OBJMosaicSize[2];
+    u8 BGMosaicY, BGMosaicYMax;
+    u8 OBJMosaicY, OBJMosaicYMax;
+
     u16 BlendCnt;
+    u16 BlendAlpha;
     u8 EVA, EVB;
     u8 EVY;
 
@@ -119,8 +125,8 @@ private:
     void InterleaveSprites(u32* buf, u32 prio, u32* dst);
     void DrawSprites(u32 line, u32* dst);
     void DrawSpritesWindow(u32 line, u8* dst);
-    template<bool window> void DrawSprite_Rotscale(u16* attrib, u16* rotparams, u32 boundwidth, u32 boundheight, u32 width, u32 height, s32 xpos, u32 ypos, u32* dst);
-    template<bool window> void DrawSprite_Normal(u16* attrib, u32 width, s32 xpos, u32 ypos, u32* dst);
+    template<bool window> void DrawSprite_Rotscale(u16* attrib, u16* rotparams, u32 boundwidth, u32 boundheight, u32 width, u32 height, s32 xpos, s32 ypos, u32* dst);
+    template<bool window> void DrawSprite_Normal(u16* attrib, u32 width, s32 xpos, s32 ypos, u32* dst);
 
     void DoCapture(u32 line, u32 width, u32* src);
 

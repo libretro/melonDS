@@ -607,6 +607,10 @@ int ClipPolygon(Vertex* vertices, int nverts, int clipstart)
 
     // TODO: check for 1-dot polygons
     // TODO: the hardware seems to use a different algorithm. it reacts differently to vertices with W=0
+    // some vertices that should get Y=-0x1000 get Y=0x1000 for some reason on hardware. it doesn't make sense.
+    // clipping seems to process the Y plane before the X plane.
+
+    // also, polygons with any negative W are completely rejected. (TODO)
 
     // X clipping
     nverts = ClipAgainstPlane<0, attribs>(vertices, nverts, clipstart);
@@ -641,9 +645,12 @@ void SubmitPolygon()
     v0 = &TempVertexBuffer[0];
     v1 = &TempVertexBuffer[1];
     v2 = &TempVertexBuffer[2];
-    normalX = ((s64)v0->Position[1] * v2->Position[3]) - ((s64)v0->Position[3] * v2->Position[1]);
-    normalY = ((s64)v0->Position[3] * v2->Position[0]) - ((s64)v0->Position[0] * v2->Position[3]);
-    normalZ = ((s64)v0->Position[0] * v2->Position[1]) - ((s64)v0->Position[1] * v2->Position[0]);
+    normalX = ((s64)(v0->Position[1]-v1->Position[1]) * (v2->Position[3]-v1->Position[3]))
+        - ((s64)(v0->Position[3]-v1->Position[3]) * (v2->Position[1]-v1->Position[1]));
+    normalY = ((s64)(v0->Position[3]-v1->Position[3]) * (v2->Position[0]-v1->Position[0]))
+        - ((s64)(v0->Position[0]-v1->Position[0]) * (v2->Position[3]-v1->Position[3]));
+    normalZ = ((s64)(v0->Position[0]-v1->Position[0]) * (v2->Position[1]-v1->Position[1]))
+        - ((s64)(v0->Position[1]-v1->Position[1]) * (v2->Position[0]-v1->Position[0]));
 
     while ((((normalX>>31) ^ (normalX>>63)) != 0) ||
            (((normalY>>31) ^ (normalY>>63)) != 0) ||
