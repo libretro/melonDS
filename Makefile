@@ -135,7 +135,7 @@ export LIB := $(LIB);$(WindowsSdkDir)
 TARGET := $(TARGET_NAME)_libretro.dll
 PSS_STYLE :=2
 LDFLAGS += -DLL
-LIBS = ws2_32.lib
+LIBS = ws2_32.lib winmm.lib
 # Windows MSVC 2010 x86
 else ifeq ($(platform), windows_msvc2010_x86)
 	CC  = cl.exe
@@ -159,12 +159,12 @@ export LIB := $(LIB);$(WindowsSdkDir)
 TARGET := $(TARGET_NAME)_libretro.dll
 PSS_STYLE :=2
 LDFLAGS += -DLL
-LIBS = ws2_32.lib
+LIBS = ws2_32.lib winmm.lib
 else
    CC = gcc
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
-   LDFLAGS += -lws2_32
+   LDFLAGS += -lws2_32 -lwinmm
 endif
 
 ifneq (,$(findstring msvc,$(platform)))
