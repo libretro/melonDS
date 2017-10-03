@@ -3,9 +3,10 @@ INCFLAGS    := -I$(CORE_DIR)/libretro-common/include
 SOURCES_C   :=
 
 ifneq ($(STATIC_LINKING), 1)
-SOURCES_C  += \
-					$(CORE_DIR)/libretro-common/rthreads/rthreads.c \
-					$(CORE_DIR)/libretro-common/streams/file_stream.c
+ifeq ($(HAVE_THREADS), 1)
+SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
+endif
+SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream.c
 endif
 
 SOURCES_CXX := $(CORE_DIR)/src/NDS.cpp \
