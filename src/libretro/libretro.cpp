@@ -629,16 +629,20 @@ bool retro_unserialize(const void *data_, size_t size)
    return false;
 }
 
-void *retro_get_memory_data(unsigned id)
+void *retro_get_memory_data(unsigned type)
 {
-   (void)id;
-   return NULL;
+   if (type == RETRO_MEMORY_SYSTEM_RAM)
+      return NDS::MainRAM;
+   else
+      return NULL;
 }
 
-size_t retro_get_memory_size(unsigned id)
+size_t retro_get_memory_size(unsigned type)
 {
-   (void)id;
-   return 0;
+   if (type == RETRO_MEMORY_SYSTEM_RAM)
+      return 0x400000;
+   else
+      return 0;
 }
 
 void retro_cheat_reset(void)
