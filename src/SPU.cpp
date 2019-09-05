@@ -777,7 +777,6 @@ int GetOutputSize()
 
     ret >>= 1;
     return ret;
->>>>>>> 1aaf0c33cef521b86b72110e82ba6ef7ac0581dd
 }
 
 void Sync(bool wait)
