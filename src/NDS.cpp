@@ -395,11 +395,12 @@ void Reset()
     FILE* f;
     u32 i;
 
+    LastSysClockCycles = 0;
+
     f = Platform::OpenLocalFile("bios9.bin", "rb");
 #ifdef __LIBRETRO__
     f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #endif
-    LastSysClockCycles = 0;
     if (!f)
     {
         printf("ARM9 BIOS not found\n");
@@ -420,7 +421,6 @@ void Reset()
 #ifdef __LIBRETRO__
     f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #endif
-
     if (!f)
     {
         printf("ARM7 BIOS not found\n");
@@ -747,9 +747,6 @@ void RelocateSave(const char* path, bool write)
     printf("SRAM: relocating to %s (write=%s)\n", path, write?"true":"false");
     NDSCart::RelocateSave(path, write);
 }
-
-
-
 u64 NextTarget()
 {
     u64 ret = SysTimestamp + kMaxIterationCycles;
@@ -1432,7 +1429,7 @@ void DivDone(u32 param)
             if (den == 0)
             {
                 DivQuotient[0] = (num<0) ? 1:-1;
-                DivQuotient[1] = (num<0) ? -1:1;
+                DivQuotient[1] = (num<0) ? -1:0;
                 *(s64*)&DivRemainder[0] = num;
             }
             else if (num == -0x80000000 && den == -1)

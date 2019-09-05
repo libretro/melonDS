@@ -132,8 +132,6 @@
      \
     func(GLGETSTRINGI, glGetStringi); \
 
-#endif
-
 DO_PROCLIST(DECLPROC_EXT);
 
 

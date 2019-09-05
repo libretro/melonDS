@@ -250,7 +250,6 @@ void Write_EEPROM(u8 val, bool islast)
     switch (CurCmd)
     {
     case 0x02:
-    case 0x0A:
         if (DataPos < addrsize)
         {
             Addr <<= 8;
@@ -265,7 +264,6 @@ void Write_EEPROM(u8 val, bool islast)
         break;
 
     case 0x03:
-    case 0x0B:
         if (DataPos < addrsize)
         {
             Addr <<= 8;
@@ -673,7 +671,6 @@ void DoSavestate(Savestate* file)
     NDSCart_SRAM::DoSavestate(file);
 }
 
-
 void ApplyDLDIPatch()
 {
     // TODO: embed patches? let the user choose? default to some builtin driver?
@@ -814,7 +811,6 @@ void ApplyDLDIPatch()
     delete[] patch;
     printf("applied DLDI patch\n");
 }
-
 
 #ifdef __LIBRETRO__
 #define fclose(stream) memstream_close(stream)

@@ -45,6 +45,7 @@ extern int Threaded3D;
 
 extern int GL_ScaleFactor;
 extern int GL_Antialias;
+
 #ifdef __LIBRETRO__
 extern bool DirectBoot;
 extern bool DirectLAN;
