@@ -22,11 +22,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <epoxy/gl.h>
-
+#if defined(__LIBRETRO__)
+    #include "glsm/glsmsym.h"
+#else
+    #include <epoxy/gl.h>
+#endif
 
 #include "Platform.h"
-
 
 namespace OpenGL
 {
