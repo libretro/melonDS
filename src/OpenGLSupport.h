@@ -23,9 +23,11 @@
 #include <string.h>
 
 // TODO: different includes for each platform
-#ifdef __APPLE__
+#if defined(__APPLE__)
     #include <OpenGL/gl3.h>
     #include <OpenGL/gl3ext.h>
+#elif defined(__LIBRETRO__)
+    #include "glsm/glsmsym.h"
 #else
     #include <GL/gl.h>
     #include <GL/glext.h>
@@ -53,6 +55,12 @@
 
 // if you need more OpenGL functions, add them to the macronator here
 
+#ifdef __LIBRETRO__
+
+#define DO_PROCLIST_1_3(func)
+#define DO_PROCLIST(func)
+
+#else
 
 #ifdef __WIN32__
 
@@ -137,6 +145,8 @@
     func(GLCOLORMASKI, glColorMaski); \
      \
     func(GLGETSTRINGI, glGetStringi); \
+
+#endif
 
 #endif
 

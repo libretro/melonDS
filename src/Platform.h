@@ -21,6 +21,11 @@
 
 #include "types.h"
 
+#ifdef __LIBRETRO__
+#include <streams/file_stream.h>
+#include <streams/file_stream_transforms.h>
+#endif
+
 namespace Platform
 {
 

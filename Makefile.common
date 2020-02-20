@@ -1,0 +1,88 @@
+INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
+               -I$(CORE_DIR) \
+               -I$(MELON_DIR)
+
+SOURCES_C   :=
+
+ifneq ($(STATIC_LINKING), 1)
+SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
+              $(CORE_DIR)/libretro-common/compat/fopen_utf8.c \
+              $(CORE_DIR)/libretro-common/compat/compat_strcasestr.c \
+              $(CORE_DIR)/libretro-common/encodings/encoding_utf.c \
+              $(CORE_DIR)/libretro-common/file/file_path.c \
+              $(CORE_DIR)/libretro-common/streams/file_stream.c \
+              $(CORE_DIR)/libretro-common/streams/file_stream_transforms.c \
+              $(CORE_DIR)/libretro-common/streams/memory_stream.c \
+              $(CORE_DIR)/libretro-common/string/stdstring.c \
+              $(CORE_DIR)/libretro-common/vfs/vfs_implementation.c
+endif
+
+SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
+                    $(MELON_DIR)/ARM.cpp \
+                    $(MELON_DIR)/ARM_InstrInfo.cpp \
+                    $(MELON_DIR)/ARMInterpreter.cpp \
+                    $(MELON_DIR)/ARMInterpreter_ALU.cpp \
+                    $(MELON_DIR)/ARMInterpreter_Branch.cpp \
+                    $(MELON_DIR)/ARMInterpreter_LoadStore.cpp \
+                    $(MELON_DIR)/CP15.cpp \
+                    $(MELON_DIR)/CRC32.cpp \
+                    $(MELON_DIR)/DMA.cpp \
+                    $(MELON_DIR)/GBACart.cpp \
+                    $(MELON_DIR)/GPU.cpp \
+                    $(MELON_DIR)/GPU2D.cpp \
+                    $(MELON_DIR)/GPU3D.cpp \
+                    $(MELON_DIR)/GPU3D_Soft.cpp \
+                    $(MELON_DIR)/NDSCart.cpp \
+                    $(MELON_DIR)/RTC.cpp \
+                    $(MELON_DIR)/Savestate.cpp \
+                    $(MELON_DIR)/SPI.cpp \
+                    $(MELON_DIR)/SPU.cpp \
+                    $(MELON_DIR)/Wifi.cpp \
+                    $(MELON_DIR)/WifiAP.cpp \
+                    $(CORE_DIR)/config.cpp \
+                    $(CORE_DIR)/input.cpp \
+                    $(CORE_DIR)/libretro.cpp \
+                    $(CORE_DIR)/platform.cpp \
+                    $(CORE_DIR)/screenlayout.cpp \
+                    $(CORE_DIR)/utils.cpp
+
+ifeq ($(HAVE_OPENGL), 1)
+SOURCES_C += $(CORE_DIR)/libretro-common/glsm/glsm.c \
+             $(CORE_DIR)/libretro-common/glsym/rglgen.c \
+             $(CORE_DIR)/libretro-common/glsym/glsym_gl.c
+
+SOURCES_CXX += $(MELON_DIR)/GPU3D_OpenGL.cpp \
+               $(MELON_DIR)/OpenGLSupport.cpp \
+                $(CORE_DIR)/opengl.cpp
+
+DEFINES += -DHAVE_OPENGL -DCORE
+endif
+
+ifeq ($(HAVE_THREADS), 1)
+SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c \
+             $(CORE_DIR)/libretro-common/rthreads/rsemaphore.c
+DEFINES += -DHAVE_THREADS
+endif
+
+ifeq ($(HAVE_NEON), 1)
+SOURCES_CXX += $(MELON_DIR)/GPU2D_Neon.cpp
+
+DEFINES += -DNEONGPU_ENABLED
+endif
+
+ifdef JIT_ARCH
+SOURCES_CXX += $(MELON_DIR)/ARMJIT.cpp \
+		     $(MELON_DIR)/dolphin/CommonFuncs.cpp
+
+DEFINES += -DJIT_ENABLED
+endif
+
+ifeq ($(JIT_ARCH), aarch64)
+SOURCES_CXX += $(MELON_DIR)/dolphin/Arm64Emitter.cpp \
+                $(MELON_DIR)/dolphin/MathUtil.cpp \
+                $(MELON_DIR)/ARMJIT_A64/ARMJIT_Compiler.cpp \
+                $(MELON_DIR)/ARMJIT_A64/ARMJIT_ALU.cpp \
+                $(MELON_DIR)/ARMJIT_A64/ARMJIT_LoadStore.cpp \
+                $(MELON_DIR)/ARMJIT_A64/ARMJIT_Branch.cpp
+DEFINES += -DARCHITECTURE_ARM64
+endif
