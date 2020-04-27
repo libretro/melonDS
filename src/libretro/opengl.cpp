@@ -241,7 +241,7 @@ void render_opengl_frame(bool sw)
    glsm_ctl(GLSM_CTL_STATE_BIND, NULL);
 
    int frontbuf = GPU::FrontBuffer;
-   bool virtual_cursor = input_state.current_touch_mode == TouchMode::Mouse;
+   bool virtual_cursor = cursor_enabled(&input_state);
 
    glBindFramebuffer(GL_FRAMEBUFFER, glsm_get_current_framebuffer());
 

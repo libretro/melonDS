@@ -157,7 +157,7 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef HAVE_THREADS
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
 #endif
-      { "melonds_touch_mode", "Touch mode; disabled|Mouse|Touch" },
+      { "melonds_touch_mode", "Touch mode; disabled|Mouse|Touch|Joystick" },
 #ifdef HAVE_OPENGL
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
       { "melonds_opengl_resolution", opengl_resolution.c_str() },
@@ -282,6 +282,8 @@ static void check_variables(bool init)
          new_touch_mode = TouchMode::Mouse;
       else if (!strcmp(var.value, "Touch"))
          new_touch_mode = TouchMode::Touch;
+      else if (!strcmp(var.value, "Joystick"))
+         new_touch_mode = TouchMode::Joystick;
    }
 
 #ifdef HAVE_OPENGL
@@ -415,7 +417,7 @@ static void render_frame(void)
       if(screen_layout_data.enable_bottom_screen)
          copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
 
-      if(input_state.current_touch_mode == TouchMode::Mouse && current_screen_layout != ScreenLayout::TopOnly)
+      if(cursor_enabled(&input_state) && current_screen_layout != ScreenLayout::TopOnly)
          draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
 
       video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
@@ -516,7 +518,10 @@ bool retro_load_game(const struct retro_game_info *info)
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y, "Y" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "Make microphone noise" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Swap screens" },
+      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3, "Touch joystick" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3, "Close lid" },
+      { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X, "Touch joystick X" },
+      { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y, "Touch joystick Y" },
       { 0 },
    };
 
