@@ -147,8 +147,11 @@ void Reset()
     else
     {
         f = Platform::OpenLocalFile(firmbkp, "wb");
-        fwrite(Firmware, 1, FirmwareLength, f);
-        fclose(f);
+        if (f)
+        {
+            fwrite(Firmware, 1, FirmwareLength, f);
+            fclose(f);
+        }
     }
 
     FirmwareMask = FirmwareLength - 1;
