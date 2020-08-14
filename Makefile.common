@@ -9,6 +9,7 @@ SOURCES_S   :=
 ifneq ($(STATIC_LINKING), 1)
 SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
               $(CORE_DIR)/libretro-common/compat/fopen_utf8.c \
+              $(CORE_DIR)/libretro-common/compat/compat_posix_string.c \
               $(CORE_DIR)/libretro-common/compat/compat_strcasestr.c \
               $(CORE_DIR)/libretro-common/encodings/encoding_utf.c \
               $(CORE_DIR)/libretro-common/file/file_path.c \
