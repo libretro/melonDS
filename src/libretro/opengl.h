@@ -1,6 +1,7 @@
 #ifndef _OPENGL_H
 #define _OPENGL_H
 
+extern bool enable_opengl;
 extern bool using_opengl;
 extern bool refresh_opengl;
 

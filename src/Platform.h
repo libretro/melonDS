@@ -24,6 +24,11 @@
 #ifdef __LIBRETRO__
 #include <streams/file_stream.h>
 #include <streams/file_stream_transforms.h>
+
+#define fclose rfclose
+#define fread rfread
+#define fseek rfseek
+
 #endif
 
 namespace Platform
