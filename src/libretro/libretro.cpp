@@ -33,6 +33,12 @@ retro_video_refresh_t video_cb;
 std::string rom_path;
 std::string save_path;
 
+GPU::RenderSettings video_settings;
+
+bool enable_opengl = false;
+bool using_opengl = false;
+bool refresh_opengl = true;
+
 enum CurrentRenderer
 {
    None,
@@ -260,9 +266,9 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "enabled"))
-         Config::Threaded3D = true;
+         video_settings.Soft_Threaded = true;
       else
-         Config::Threaded3D = false;
+         video_settings.Soft_Threaded = false;
    }
 #endif
 
@@ -293,7 +299,7 @@ static void check_variables(bool init)
 
          if(!init && using_opengl) current_renderer = use_opengl ? CurrentRenderer::OpenGL : CurrentRenderer::Software;
 
-         Config::_3DRenderer = use_opengl;
+         enable_opengl = use_opengl;
       }
    }
 
@@ -303,14 +309,14 @@ static void check_variables(bool init)
       int first_char_val = (int)var.value[0];
       int scaleing = Clamp(first_char_val - 48, 0, 8);
 
-      if(Config::GL_ScaleFactor != scaleing)
+      if(video_settings.GL_ScaleFactor != scaleing)
          gl_update = true;
 
-      Config::GL_ScaleFactor = scaleing;
+      video_settings.GL_ScaleFactor = scaleing;
    }
    else
    {
-      Config::GL_ScaleFactor = 1;
+      video_settings.GL_ScaleFactor = 1;
    }
 
    if((using_opengl && gl_update) || layout != current_screen_layout)
@@ -337,9 +343,9 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "enabled"))
-         Config::JIT_BrancheOptimisations = true;
+         Config::JIT_BranchOptimisations = true;
       else
-         Config::JIT_BrancheOptimisations = false;
+         Config::JIT_BranchOptimisations = false;
    }
 
    var.key = "melonds_jit_literal_optimisations";
@@ -354,7 +360,7 @@ static void check_variables(bool init)
 
    input_state.current_touch_mode = new_touch_mode;
 
-   update_screenlayout(layout, &screen_layout_data, Config::_3DRenderer);
+   update_screenlayout(layout, &screen_layout_data, enable_opengl);
 }
 
 static void audio_callback(void)
@@ -373,7 +379,7 @@ static void render_frame(void)
    if (current_renderer == CurrentRenderer::None)
    {
  #ifdef HAVE_OPENGL
-         if (Config::_3DRenderer && using_opengl)
+         if (enable_opengl && using_opengl)
          {
             // Try to initialize opengl, if it failed fallback to software
             if (initialize_opengl()) current_renderer = CurrentRenderer::OpenGL;
@@ -387,19 +393,21 @@ static void render_frame(void)
          {
             if(using_opengl) deinitialize_opengl_renderer();
 #endif
-            GPU3D::InitRenderer(false);
+            GPU::InitRenderer(false);
             current_renderer = CurrentRenderer::Software;
 #ifdef HAVE_OPENGL
          }
 #endif
    }
+#ifdef HAVE_OPENGL
    if(using_opengl)
    {
       if (current_renderer == CurrentRenderer::Software) render_opengl_frame(true);
       else render_opengl_frame(false);
    }
-   else if(!Config::_3DRenderer)
+   else if(!enable_opengl)
    {
+   #endif
       int frontbuf = GPU::FrontBuffer;
       if(screen_layout_data.enable_top_screen)
          copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset);
@@ -410,7 +418,9 @@ static void render_frame(void)
          draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
 
       video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+#ifdef HAVE_OPENGL
    }
+#endif
 }
 
 void retro_run(void)
@@ -480,6 +490,10 @@ bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
 
+   strcpy(Config::BIOS7Path, "bios7.bin");
+   strcpy(Config::BIOS9Path, "bios9.bin");
+   strcpy(Config::FirmwarePath, "firmware.bin");
+
    struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "Left" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "Up" },
@@ -511,7 +525,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
    // Initialize the opengl state if needed
 #ifdef HAVE_OPENGL
-   if (Config::_3DRenderer)
+   if (enable_opengl)
       initialize_opengl();
 #endif
 
@@ -524,6 +538,8 @@ bool retro_load_game(const struct retro_game_info *info)
    rom_path = std::string(info->path);
    save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(game_name) + ".sav";
 
+   GPU::SetRenderSettings(false, video_settings);
+   NDS::SetConsoleType(0);
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
 
    (void)info;

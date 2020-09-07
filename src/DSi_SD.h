@@ -22,6 +22,9 @@
 #include <string.h>
 #include "FIFO.h"
 
+#ifdef __LIBRETRO__
+#include <streams/file_stream_transforms.h>
+#endif
 
 class DSi_SDDevice;
 

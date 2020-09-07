@@ -21,8 +21,8 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
     if(opengl)
     {
         // To avoid some issues the size should be at least 4x the native res
-        if(Config::GL_ScaleFactor > 4)
-            scale = Config::GL_ScaleFactor;
+        if(video_settings.GL_ScaleFactor > 4)
+            scale = video_settings.GL_ScaleFactor;
         else
             scale = 4;
     }
