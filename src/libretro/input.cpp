@@ -30,7 +30,7 @@ void update_input(InputState *state)
 
    NDS::SetKeyMask(input_mask);
 
-   bool lid_closed_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
+   bool lid_closed_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3);
    if(lid_closed_btn != state->lid_closed)
    {
       NDS::SetLidClosed(lid_closed_btn);
@@ -38,6 +38,7 @@ void update_input(InputState *state)
    }
 
    state->holding_noise_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2);
+   state->swap_screens_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
 
    if(current_screen_layout != ScreenLayout::TopOnly)
    {
