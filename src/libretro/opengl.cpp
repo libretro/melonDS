@@ -184,11 +184,13 @@ void setup_opengl_frame_state(void)
 
    float top_screen_x = 0.0f;
    float top_screen_y = 0.0f;
+   float top_screen_scale = 1.0f;
 
    float bottom_screen_x = 0.0f;
    float bottom_screen_y = 0.0f;
+   float bottom_screen_scale = 1.0f;
 
-   switch (current_screen_layout)
+   switch (screen_layout_data.displayed_layout)
    {
       case ScreenLayout::TopBottom:
          bottom_screen_y = screen_height;
@@ -208,6 +210,20 @@ void setup_opengl_frame_state(void)
       case ScreenLayout::BottomOnly:
          top_screen_y = screen_height; // ditto
          break;
+      case ScreenLayout::HybridTop:
+         top_screen_scale = (float)screen_layout_data.hybrid_ratio;
+
+         bottom_screen_x = screen_width * screen_layout_data.hybrid_ratio;
+         bottom_screen_y = screen_height * (screen_layout_data.hybrid_ratio - 1);
+
+         break;
+      case ScreenLayout::HybridBottom:
+         bottom_screen_scale = (float)screen_layout_data.hybrid_ratio;
+
+         top_screen_x = screen_width * screen_layout_data.hybrid_ratio;
+         top_screen_y = screen_height * (screen_layout_data.hybrid_ratio - 1);
+
+         break;
    }
 
    #define SETVERTEX(i, x, y, t_x, t_y) \
@@ -218,19 +234,19 @@ void setup_opengl_frame_state(void)
 
    // top screen
    SETVERTEX(0, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
-   SETVERTEX(1, top_screen_x, top_screen_y + screen_height, 0.0f, VIDEO_HEIGHT); // bottom left
-   SETVERTEX(2, top_screen_x + screen_width, top_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+   SETVERTEX(1, top_screen_x, top_screen_y + screen_height * top_screen_scale, 0.0f, VIDEO_HEIGHT); // bottom left
+   SETVERTEX(2, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
    SETVERTEX(3, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
-   SETVERTEX(4, top_screen_x + screen_width, top_screen_y, VIDEO_WIDTH, 0.0f); // top right
-   SETVERTEX(5, top_screen_x + screen_width, top_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+   SETVERTEX(4, top_screen_x + screen_width * top_screen_scale, top_screen_y, VIDEO_WIDTH, 0.0f); // top right
+   SETVERTEX(5, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
 
    // bottom screen
    SETVERTEX(6, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
-   SETVERTEX(7, bottom_screen_x, bottom_screen_y + screen_height, 0.0f, VIDEO_HEIGHT * 2.0f); // bottom left
-   SETVERTEX(8, bottom_screen_x + screen_width, bottom_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT * 2.0f); // bottom right
+   SETVERTEX(7, bottom_screen_x, bottom_screen_y + screen_height * bottom_screen_scale, 0.0f, VIDEO_HEIGHT * 2.0f); // bottom left
+   SETVERTEX(8, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT * 2.0f); // bottom right
    SETVERTEX(9, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
-   SETVERTEX(10, bottom_screen_x + screen_width, bottom_screen_y, VIDEO_WIDTH, VIDEO_HEIGHT); // top right
-   SETVERTEX(11, bottom_screen_x + screen_width, bottom_screen_y + screen_height, VIDEO_WIDTH, VIDEO_HEIGHT * 2.0f); // bottom right
+   SETVERTEX(10, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y, VIDEO_WIDTH, VIDEO_HEIGHT); // top right
+   SETVERTEX(11, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, VIDEO_WIDTH, VIDEO_HEIGHT * 2.0f); // bottom right
 
    glBindBuffer(GL_ARRAY_BUFFER, vbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(screen_vertices), screen_vertices);

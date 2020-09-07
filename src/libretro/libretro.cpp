@@ -153,7 +153,8 @@ void retro_set_environment(retro_environment_t cb)
   static const retro_variable values[] =
    {
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
-      { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only" },
+      { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only|Hybrid Top|Hybrid Bottom" },
+      { "melonds_hybrid_ratio", "Hybrid ratio; 2|3" },
 #ifdef HAVE_THREADS
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
 #endif
@@ -260,6 +261,16 @@ static void check_variables(bool init)
          layout = ScreenLayout::TopOnly;
       else if (!strcmp(var.value, "Bottom Only"))
          layout = ScreenLayout::BottomOnly;
+      else if (!strcmp(var.value, "Hybrid Top"))
+         layout = ScreenLayout::HybridTop;
+      else if (!strcmp(var.value, "Hybrid Bottom"))
+         layout = ScreenLayout::HybridBottom;
+   }
+
+   var.key = "melonds_hybrid_ratio";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value != NULL)
+   {
+      screen_layout_data.hybrid_ratio = std::stoi(var.value);
    }
 
 #ifdef HAVE_THREADS
@@ -412,15 +423,32 @@ static void render_frame(void)
    {
    #endif
       int frontbuf = GPU::FrontBuffer;
-      if(screen_layout_data.enable_top_screen)
-         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset);
-      if(screen_layout_data.enable_bottom_screen)
-         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
 
-      if(cursor_enabled(&input_state) && current_screen_layout != ScreenLayout::TopOnly)
-         draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
+      if(screen_layout_data.hybrid)
+      {
+         unsigned primary = screen_layout_data.displayed_layout == ScreenLayout::HybridTop ? 0 : 1;
+         unsigned secondary = screen_layout_data.displayed_layout == ScreenLayout::HybridTop ? 1 : 0;
 
-      video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][primary], screen_layout_data.top_screen_offset, true);
+         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][secondary], screen_layout_data.bottom_screen_offset, false);
+
+         if(cursor_enabled(&input_state))
+            draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
+
+         video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+      }
+      else
+      {
+         if(screen_layout_data.enable_top_screen)
+            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], 0, false);
+         if(screen_layout_data.enable_bottom_screen)
+            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], 0, false);
+
+         if(cursor_enabled(&input_state) && current_screen_layout != ScreenLayout::TopOnly)
+            draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
+
+         video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+      }
 #ifdef HAVE_OPENGL
    }
 #endif
@@ -434,6 +462,9 @@ void retro_run(void)
    {
       swapped_screens = input_state.swap_screens_btn; 
       update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
+#ifdef HAVE_OPENGL
+      refresh_opengl = true;
+#endif
    }
 
    if (input_state.holding_noise_btn)

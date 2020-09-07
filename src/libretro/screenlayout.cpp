@@ -9,6 +9,7 @@ ScreenLayoutData screen_layout_data;
 void initialize_screnlayout_data(ScreenLayoutData *data)
 {
     data->buffer_ptr = nullptr;
+    data->hybrid_ratio = 2;
 }
 
 void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl, bool swap_screens)
@@ -32,6 +33,7 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
     unsigned old_size = data->buffer_stride * data->buffer_height;
 
     data->direct_copy = false;
+    data->hybrid = false;
 
     data->screen_width = VIDEO_WIDTH * scale;
     data->screen_height = VIDEO_HEIGHT * scale;
@@ -42,24 +44,30 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
     {
         switch (current_screen_layout)
         {
-        case ScreenLayout::BottomOnly:
-            layout = ScreenLayout::TopOnly;
-            break;
-        case ScreenLayout::TopOnly:
-            layout = ScreenLayout::BottomOnly;
-            break;
-        case ScreenLayout::BottomTop:
-            layout = ScreenLayout::TopBottom;
-            break;
-        case ScreenLayout::TopBottom:
-            layout = ScreenLayout::BottomTop;
-            break;
-        case ScreenLayout::LeftRight:
-            layout = ScreenLayout::RightLeft;
-            break;
-        case ScreenLayout::RightLeft:
-            layout = ScreenLayout::LeftRight;
-            break;
+            case ScreenLayout::BottomOnly:
+                layout = ScreenLayout::TopOnly;
+                break;
+            case ScreenLayout::TopOnly:
+                layout = ScreenLayout::BottomOnly;
+                break;
+            case ScreenLayout::BottomTop:
+                layout = ScreenLayout::TopBottom;
+                break;
+            case ScreenLayout::TopBottom:
+                layout = ScreenLayout::BottomTop;
+                break;
+            case ScreenLayout::LeftRight:
+                layout = ScreenLayout::RightLeft;
+                break;
+            case ScreenLayout::RightLeft:
+                layout = ScreenLayout::LeftRight;
+                break;
+            case ScreenLayout::HybridTop:
+                layout = ScreenLayout::HybridBottom;
+                break;
+            case ScreenLayout::HybridBottom:
+                layout = ScreenLayout::HybridTop;
+                break;
         }
     }
 
@@ -158,7 +166,32 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
             data->bottom_screen_offset = 0;
 
             break;
+        case ScreenLayout::HybridTop:
+        case ScreenLayout::HybridBottom:
+            data->enable_top_screen = true;
+            data->enable_bottom_screen = true;
+
+            data->hybrid = true;
+
+            data->buffer_width = (data->screen_width * data->hybrid_ratio) + data->screen_width;
+            data->buffer_height = (data->screen_height * data->hybrid_ratio);
+            data->buffer_stride = data->buffer_width * pixel_size;
+
+            if (layout == ScreenLayout::HybridTop)
+            {
+                data->touch_offset_x = (data->screen_width * data->hybrid_ratio);
+                data->touch_offset_y = (data->screen_height * (data->hybrid_ratio - 1));
+            }
+            else
+            {
+                data->touch_offset_x = 0;
+                data->touch_offset_y = 0;
+            }
+
+            break;
     }
+
+    data->displayed_layout = layout;
 
     if (opengl && data->buffer_ptr != nullptr) {
         // not needed anymore :)
