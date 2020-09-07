@@ -19,6 +19,8 @@ enum ScreenLayout
    RightLeft = 3,
    TopOnly = 4,
    BottomOnly = 5,
+   HybridTop = 6,
+   HybridBottom = 7,
 };
 
 struct ScreenLayoutData
@@ -26,6 +28,7 @@ struct ScreenLayoutData
     bool enable_top_screen;
     bool enable_bottom_screen;
     bool direct_copy;
+
     unsigned pixel_size;
     unsigned scale;
 
@@ -37,11 +40,15 @@ struct ScreenLayoutData
     unsigned touch_offset_x;
     unsigned touch_offset_y;
 
+    bool hybrid;
+    unsigned hybrid_ratio;
+
     unsigned buffer_width;
     unsigned buffer_height;
     unsigned buffer_stride;
     size_t buffer_len;
     uint16_t* buffer_ptr;
+    ScreenLayout displayed_layout;
 };
 
 extern ScreenLayout current_screen_layout;
