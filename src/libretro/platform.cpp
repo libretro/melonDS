@@ -86,9 +86,6 @@ namespace Platform
 
    void Semaphore_Reset(void *sema)
    {
-   #ifdef HAVE_THREADS
-      while (ssem_trywait((ssem_t*)sema) == true);
-   #endif
    }
 
    void Semaphore_Post(void *sema)
