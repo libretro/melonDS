@@ -49,5 +49,5 @@ extern ScreenLayoutData screen_layout_data;
 extern GPU::RenderSettings video_settings;
 
 void initialize_screnlayout_data(ScreenLayoutData *data);
-void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl);
+void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl, bool swap_screens);
 #endif
