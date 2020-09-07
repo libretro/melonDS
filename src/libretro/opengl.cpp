@@ -13,8 +13,9 @@
 
 struct retro_hw_render_callback hw_render;
 
-bool using_opengl = false;
-bool refresh_opengl = true;
+extern bool enable_opengl;
+extern bool using_opengl;
+extern bool refresh_opengl;
 
 static bool initialized_glsm;
 static GLuint screen_shader[3];
@@ -35,19 +36,19 @@ static GLuint ubo;
 
 static bool setup_opengl(void)
 {
-   GPU3D::InitRenderer(true);
+   GPU::InitRenderer(true);
 
-   if (!OpenGL_BuildShaderProgram(screen_vertex_shader, screen_fragment_shader, screen_shader, "ScreenShader"))
+   if (!OpenGL::BuildShaderProgram(screen_vertex_shader, screen_fragment_shader, screen_shader, "ScreenShader"))
       return false;
 
-   if (!OpenGL_BuildShaderProgram(vertex_shader, fragment_shader, shader, "AccelShader"))
+   if (!OpenGL::BuildShaderProgram(vertex_shader, fragment_shader, shader, "AccelShader"))
       return false;
 
    glBindAttribLocation(shader[2], 0, "vPosition");
    glBindAttribLocation(shader[2], 1, "vTexcoord");
    glBindFragDataLocation(shader[2], 0, "oColor");
 
-   if (!OpenGL_LinkShaderProgram(shader))
+   if (!OpenGL::LinkShaderProgram(shader))
       return false;
 
    GLuint uni_id;
@@ -96,7 +97,7 @@ static bool setup_opengl(void)
 static void context_reset(void)
 {
    if(using_opengl)
-      GPU3D::DeInitRenderer();
+      GPU::DeInitRenderer();
 
    glsm_ctl(GLSM_CTL_STATE_CONTEXT_RESET, NULL);
 
@@ -107,7 +108,7 @@ static void context_reset(void)
    setup_opengl();
 
    if(using_opengl)
-      GPU3D::InitRenderer(true);
+      GPU::InitRenderer(true);
    glsm_ctl(GLSM_CTL_STATE_UNBIND, NULL);
 
    initialized_glsm = true;
@@ -122,7 +123,7 @@ static void context_destroy(void)
    glDeleteVertexArrays(1, &vao);
    glDeleteBuffers(1, &vbo);
 
-   OpenGL_DeleteShaderProgram(shader);
+   OpenGL::DeleteShaderProgram(shader);
    glsm_ctl(GLSM_CTL_STATE_UNBIND, NULL);
 
    initialized_glsm = false;
@@ -155,19 +156,19 @@ bool initialize_opengl(void)
 
 void deinitialize_opengl_renderer(void)
 {
-   GPU3D::DeInitRenderer();
-   GPU3D::InitRenderer(false);
+   GPU::DeInitRenderer();
+   GPU::InitRenderer(false);
 }
 
 void setup_opengl_frame_state(void)
 {
    refresh_opengl = false;
 
-   GPU3D::UpdateRendererConfig();
+   GPU::SetRenderSettings(true, video_settings);
 
    GL_ShaderConfig.uScreenSize[0] = screen_layout_data.buffer_width;
    GL_ShaderConfig.uScreenSize[1] = screen_layout_data.buffer_height;
-   GL_ShaderConfig.u3DScale = Config::GL_ScaleFactor;
+   GL_ShaderConfig.u3DScale = video_settings.GL_ScaleFactor;
    GL_ShaderConfig.cursorPos[0] = -1;
    GL_ShaderConfig.cursorPos[1] = -1;
    GL_ShaderConfig.cursorPos[2] = -1;
@@ -266,7 +267,7 @@ void render_opengl_frame(bool sw)
 
    glViewport(0, 0, screen_layout_data.buffer_width, screen_layout_data.buffer_height);
 
-   OpenGL_UseShaderProgram(sw ? screen_shader : shader);
+   OpenGL::UseShaderProgram(sw ? screen_shader : shader);
 
    glClearColor(0, 0, 0, 1);
    glClear(GL_COLOR_BUFFER_BIT);

@@ -464,6 +464,8 @@ void SetRenderSettings(int renderer, RenderSettings& settings)
     GPU2D_A->SetRenderSettings(accel);
     GPU2D_B->SetRenderSettings(accel);
 
+    printf("%d\n", Renderer);
+
     if (Renderer == 0)
     {
         GPU3D::SoftRenderer::SetRenderSettings(settings);

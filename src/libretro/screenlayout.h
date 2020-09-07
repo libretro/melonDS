@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "NDS.h"
+#include "GPU.h"
+
 #define VIDEO_WIDTH 256
 #define VIDEO_HEIGHT 192
 
@@ -43,6 +46,7 @@ struct ScreenLayoutData
 
 extern ScreenLayout current_screen_layout;
 extern ScreenLayoutData screen_layout_data;
+extern GPU::RenderSettings video_settings;
 
 void initialize_screnlayout_data(ScreenLayoutData *data);
 void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl);
