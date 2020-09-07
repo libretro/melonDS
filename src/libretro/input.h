@@ -17,6 +17,7 @@ struct InputState
    TouchMode current_touch_mode;
 
    bool holding_noise_btn = false;
+   bool swap_screens_btn = false;
    bool lid_closed = false;
 };
 

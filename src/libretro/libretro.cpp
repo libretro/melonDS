@@ -38,6 +38,7 @@ GPU::RenderSettings video_settings;
 bool enable_opengl = false;
 bool using_opengl = false;
 bool refresh_opengl = true;
+bool swapped_screens = false;
 
 enum CurrentRenderer
 {
@@ -360,7 +361,7 @@ static void check_variables(bool init)
 
    input_state.current_touch_mode = new_touch_mode;
 
-   update_screenlayout(layout, &screen_layout_data, enable_opengl);
+   update_screenlayout(layout, &screen_layout_data, enable_opengl, swapped_screens);
 }
 
 static void audio_callback(void)
@@ -427,7 +428,13 @@ void retro_run(void)
 {
    update_input(&input_state);
 
-   if(input_state.holding_noise_btn)
+   if (input_state.swap_screens_btn != swapped_screens)
+   {
+      swapped_screens = input_state.swap_screens_btn; 
+      update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
+   }
+
+   if (input_state.holding_noise_btn)
    {
       s16 tmp[735];
       for (int i = 0; i < 735; i++) tmp[i] = rand() & 0xFFFF;
@@ -507,8 +514,9 @@ bool retro_load_game(const struct retro_game_info *info)
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L, "L" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X, "X" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y, "Y" },
-      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Close lid" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "Make microphone noise" },
+      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Swap screens" },
+      { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3, "Close lid" },
       { 0 },
    };
 

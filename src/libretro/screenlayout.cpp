@@ -11,7 +11,7 @@ void initialize_screnlayout_data(ScreenLayoutData *data)
     data->buffer_ptr = nullptr;
 }
 
-void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl)
+void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl, bool swap_screens)
 {
     unsigned pixel_size = 4; // XRGB8888 is hardcoded for now, so it's fine
     data->pixel_size = pixel_size;
@@ -35,6 +35,33 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
 
     data->screen_width = VIDEO_WIDTH * scale;
     data->screen_height = VIDEO_HEIGHT * scale;
+
+    current_screen_layout = layout;
+
+    if (swap_screens)
+    {
+        switch (current_screen_layout)
+        {
+        case ScreenLayout::BottomOnly:
+            layout = ScreenLayout::TopOnly;
+            break;
+        case ScreenLayout::TopOnly:
+            layout = ScreenLayout::BottomOnly;
+            break;
+        case ScreenLayout::BottomTop:
+            layout = ScreenLayout::TopBottom;
+            break;
+        case ScreenLayout::TopBottom:
+            layout = ScreenLayout::BottomTop;
+            break;
+        case ScreenLayout::LeftRight:
+            layout = ScreenLayout::RightLeft;
+            break;
+        case ScreenLayout::RightLeft:
+            layout = ScreenLayout::LeftRight;
+            break;
+        }
+    }
 
     switch (layout)
     {
@@ -150,6 +177,4 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
             memset(data->buffer_ptr, 0, new_size);
         }
     }
-
-    current_screen_layout = layout;
 }
