@@ -2,7 +2,9 @@ INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
                -I$(CORE_DIR) \
                -I$(MELON_DIR)
 
-SOURCES_C   :=
+SOURCES_C   := $(MELON_DIR)/xxhash/xxhash.c \
+               $(MELON_DIR)/tiny-AES-c/aes.c
+SOURCES_S   :=
 
 ifneq ($(STATIC_LINKING), 1)
 SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
@@ -18,8 +20,8 @@ SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
 endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
+                    $(MELON_DIR)/AREngine.cpp \
                     $(MELON_DIR)/ARM.cpp \
-                    $(MELON_DIR)/ARM_InstrInfo.cpp \
                     $(MELON_DIR)/ARMInterpreter.cpp \
                     $(MELON_DIR)/ARMInterpreter_ALU.cpp \
                     $(MELON_DIR)/ARMInterpreter_Branch.cpp \
@@ -27,6 +29,15 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/CP15.cpp \
                     $(MELON_DIR)/CRC32.cpp \
                     $(MELON_DIR)/DMA.cpp \
+                    $(MELON_DIR)/DSi.cpp \
+                    $(MELON_DIR)/DSi_AES.cpp \
+                    $(MELON_DIR)/DSi_Camera.cpp \
+                    $(MELON_DIR)/DSi_I2C.cpp \
+                    $(MELON_DIR)/DSi_NDMA.cpp \
+                    $(MELON_DIR)/DSi_NWifi.cpp \
+                    $(MELON_DIR)/DSi_SD.cpp \
+                    $(MELON_DIR)/DSi_SPI_TSC.cpp \
+                    $(MELON_DIR)/DSiCrypto.cpp \
                     $(MELON_DIR)/GBACart.cpp \
                     $(MELON_DIR)/GPU.cpp \
                     $(MELON_DIR)/GPU2D.cpp \
@@ -51,11 +62,12 @@ SOURCES_C += $(CORE_DIR)/libretro-common/glsm/glsm.c \
              $(CORE_DIR)/libretro-common/glsym/rglgen.c \
              $(CORE_DIR)/libretro-common/glsym/glsym_gl.c
 
-SOURCES_CXX += $(MELON_DIR)/GPU3D_OpenGL.cpp \
-               $(MELON_DIR)/OpenGLSupport.cpp \
+SOURCES_CXX +=  $(MELON_DIR)/GPU_OpenGL.cpp \
+                $(MELON_DIR)/GPU3D_OpenGL.cpp \
+                $(MELON_DIR)/OpenGLSupport.cpp \
                 $(CORE_DIR)/opengl.cpp
 
-DEFINES += -DHAVE_OPENGL -DCORE
+DEFINES += -DHAVE_OPENGL -DOGLRENDERER_ENABLED -DCORE
 endif
 
 ifeq ($(HAVE_THREADS), 1)
@@ -72,7 +84,9 @@ endif
 
 ifdef JIT_ARCH
 SOURCES_CXX += $(MELON_DIR)/ARMJIT.cpp \
-		     $(MELON_DIR)/dolphin/CommonFuncs.cpp
+                $(MELON_DIR)/ARMJIT_Memory.cpp \
+                $(MELON_DIR)/ARM_InstrInfo.cpp \
+		        $(MELON_DIR)/dolphin/CommonFuncs.cpp
 
 DEFINES += -DJIT_ENABLED
 endif
@@ -84,5 +98,23 @@ SOURCES_CXX += $(MELON_DIR)/dolphin/Arm64Emitter.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_ALU.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_LoadStore.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_Branch.cpp
+SOURCES_S += $(MELON_DIR)/ARMJIT_A64/ARMJIT_Linkage.s
+INCFLAGS += $(MELON_DIR)/ARMJIT_A64/
+
 DEFINES += -DARCHITECTURE_ARM64
+endif
+
+ifeq ($(JIT_ARCH), x64)
+SOURCES_CXX += $(MELON_DIR)/dolphin/x64ABI.cpp \
+                $(MELON_DIR)/dolphin/x64CPUDetect.cpp \
+                $(MELON_DIR)/dolphin/x64Emitter.cpp \
+                $(MELON_DIR)/ARMJIT_x64/ARMJIT_ALU.cpp \
+                $(MELON_DIR)/ARMJIT_x64/ARMJIT_Branch.cpp \
+                $(MELON_DIR)/ARMJIT_x64/ARMJIT_Compiler.cpp \
+                $(MELON_DIR)/ARMJIT_x64/ARMJIT_GenOffsets.cpp \
+                $(MELON_DIR)/ARMJIT_x64/ARMJIT_LoadStore.cpp
+SOURCES_S += $(MELON_DIR)/ARMJIT_x64/ARMJIT_Linkage.s
+INCFLAGS += $(MELON_DIR)/ARMJIT_x64/
+
+DEFINES += -DARCHITECTURE_X64
 endif
