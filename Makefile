@@ -79,6 +79,7 @@ ifeq ($(platform), unix)
    LIBS +=-lpthread -lGL
    HAVE_OPENGL=1
    HAVE_THREADS=1
+   JIT_ARCH=x64
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
@@ -325,6 +326,7 @@ endif
 ifneq (,$(findstring msvc,$(platform)))
 CFLAGS += -D_CRT_SECURE_NO_WARNINGS
 CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
+JIT_ARCH=x64
 endif
 
 ifeq ($(DEBUG), 1)
@@ -335,7 +337,7 @@ endif
 
 include Makefile.common
 
-OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
+OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o) $(SOURCES_S:.s=.o)
 
 CXXFLAGS += -std=gnu++14
 
@@ -389,6 +391,9 @@ endif
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(fpic) -c $(OBJOUT)$@ $<
+
+%.o: %.s
+	$(CC) $(CFLAGS) $(fpic) -x assembler-with-cpp -c $(OBJOUT)$@ $<
 
 clean:
 	rm -f $(OBJECTS) $(TARGET)

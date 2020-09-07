@@ -25,34 +25,38 @@
 
 namespace Config
 {
-    int _3DRenderer;
-    int Threaded3D;
+    char BIOS9Path[1024];
+    char BIOS7Path[1024];
+    char FirmwarePath[1024];
+    int DLDIEnable;
+    char DLDISDPath[1024];
 
-    int GL_ScaleFactor;
-    int GL_Antialias;
+    char DSiBIOS9Path[1024];
+    char DSiBIOS7Path[1024];
+    char DSiFirmwarePath[1024];
+    char DSiNANDPath[1024];
+    int DSiSDEnable;
+    char DSiSDPath[1024];
+
+    int RandomizeMAC;
 
 #ifdef JIT_ENABLED
-    bool JIT_Enable = true;
+    int JIT_Enable = true;
     int JIT_MaxBlockSize = 12;
-    bool JIT_BrancheOptimisations = true;
-    bool JIT_LiteralOptimisations = true;
+    int JIT_BranchOptimisations = true;
+    int JIT_LiteralOptimisations = true;
+    int JIT_FastMemory = false;
 #else
     // Needed for savestate
-    bool JIT_Enable = false;
+    int JIT_Enable = false;
 #endif
 
     ConfigEntry ConfigFile[] =
     {
-        {"3DRenderer", 0, &_3DRenderer, 1, NULL, 0},
-        {"Threaded3D", 0, &Threaded3D, 1, NULL, 0},
-
-        {"GL_ScaleFactor", 0, &GL_ScaleFactor, 1, NULL, 0},
-        {"GL_Antialias", 0, &GL_Antialias, 0, NULL, 0},
-
 #ifdef JIT_ENABLED
         {"JIT_Enable", 0, &JIT_Enable, 0, NULL, 0},
         {"JIT_MaxBlockSize", 0, &JIT_MaxBlockSize, 10, NULL, 0},
-        {"JIT_BrancheOptimisations", 0, &JIT_BrancheOptimisations, 1, NULL, 0},
+        {"JIT_BranchOptimisations", 0, &JIT_BranchOptimisations, 1, NULL, 0},
         {"JIT_LiteralOptimisations", 0, &JIT_LiteralOptimisations, 1, NULL, 0},
 #endif
 

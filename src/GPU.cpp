@@ -305,9 +305,12 @@ void InitRenderer(int renderer)
 
 void DeInitRenderer()
 {
+#ifdef HAVE_OPENGL
     if (Renderer == 0)
     {
+#endif
         GPU3D::SoftRenderer::DeInit();
+#ifdef HAVE_OPENGL
     }
 #ifdef OGLRENDERER_ENABLED
     else
@@ -320,9 +323,12 @@ void DeInitRenderer()
 
 void ResetRenderer()
 {
+#ifdef HAVE_OPENGL
     if (Renderer == 0)
     {
+#endif
         GPU3D::SoftRenderer::Reset();
+#ifdef HAVE_OPENGL
     }
 #ifdef OGLRENDERER_ENABLED
     else
@@ -365,9 +371,14 @@ void SetRenderSettings(int renderer, RenderSettings& settings)
     GPU2D_A->SetRenderSettings(accel);
     GPU2D_B->SetRenderSettings(accel);
 
+    printf("%d\n", Renderer);
+
+#ifdef HAVE_OPENGL
     if (Renderer == 0)
     {
+#endif
         GPU3D::SoftRenderer::SetRenderSettings(settings);
+#ifdef HAVE_OPENGL
     }
 #ifdef OGLRENDERER_ENABLED
     else
