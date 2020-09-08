@@ -5,11 +5,10 @@
 #include "NDS.h"
 
 InputState input_state;
-u32 input_mask;
+u32 input_mask = 0xFFF;
+static bool has_touched = false;
 
-const int remap_nds_key(const int i) { return i > 9 ? i + 6 : i; }
-
-#define ADD_KEY_TO_MASK(key, i) if (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, key)) input_mask &= ~(1 << remap_nds_key(i)); else input_mask |= (1 << remap_nds_key(i));
+#define ADD_KEY_TO_MASK(key, i) if (!!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, key)) input_mask &= ~(1 << i); else input_mask |= (1 << i);
 
 bool cursor_enabled(InputState *state)
 {
@@ -108,8 +107,9 @@ void update_input(InputState *state)
    if(state->touching)
    {
       NDS::TouchScreen(state->touch_x, state->touch_y);
+      has_touched = true;
    }
-   else
+   else if(has_touched)
    {
       NDS::ReleaseScreen();
    }
