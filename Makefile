@@ -333,6 +333,12 @@ else
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
    LDFLAGS += -lws2_32 -lwinmm
+
+   ifeq ($(MSYSTEM),MINGW64)
+	  LDFLAGS += -lopengl32
+      HAVE_OPENGL=1
+	  JIT_ARCH=x64
+   endif
 endif
 
 ifneq (,$(findstring msvc,$(platform)))
