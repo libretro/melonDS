@@ -173,13 +173,13 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
 
             data->hybrid = true;
 
-            data->buffer_width = (data->screen_width * data->hybrid_ratio) + data->screen_width;
+            data->buffer_width = (data->screen_width * data->hybrid_ratio) + data->screen_width + (data->hybrid_ratio * 2);
             data->buffer_height = (data->screen_height * data->hybrid_ratio);
             data->buffer_stride = data->buffer_width * pixel_size;
 
             if (layout == ScreenLayout::HybridTop)
             {
-                data->touch_offset_x = (data->screen_width * data->hybrid_ratio);
+                data->touch_offset_x = (data->screen_width * data->hybrid_ratio) + (data->hybrid_ratio / 2);
                 data->touch_offset_y = (data->screen_height * (data->hybrid_ratio - 1));
             }
             else
