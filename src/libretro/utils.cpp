@@ -28,7 +28,6 @@ void copy_screen(ScreenLayoutData *data, uint32_t* src, unsigned offset, bool pr
 
                pixel_data = *(uint32_t*)(src + (y * data->screen_width) + x);
 
-               pixel;
                for (pixel = 0; pixel < data->hybrid_ratio; pixel++)
                {
                   *(uint32_t *)(data->buffer_ptr + (buffer_y * data->buffer_stride / 2) + pixel * 2 + (buffer_x * 2)) = pixel_data;
@@ -43,7 +42,7 @@ void copy_screen(ScreenLayoutData *data, uint32_t* src, unsigned offset, bool pr
          {
             memcpy((uint16_t *)data->buffer_ptr
                // X
-               + ((data->screen_width * data->hybrid_ratio * 2) + data->hybrid_ratio)
+               + ((data->screen_width * data->hybrid_ratio * 2) + (data->hybrid_ratio % 2 == 0 ? data->hybrid_ratio : ((data->hybrid_ratio / 2) * 4)))
                // Y
                + ((y + (data->screen_height * (data->hybrid_ratio - 1))) * data->buffer_stride / 2),
                src + (y * data->screen_width), (data->screen_width) * data->pixel_size);
