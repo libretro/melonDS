@@ -334,6 +334,8 @@ else
    LDFLAGS += -lws2_32 -lwinmm
 
    ifeq ($(MSYSTEM),MINGW64)
+   	  CC = x86_64-w64-mingw32-gcc
+      CXX = x86_64-w64-mingw32-g++
 	  LDFLAGS += -lopengl32
       HAVE_OPENGL=1
 	  JIT_ARCH=x64
