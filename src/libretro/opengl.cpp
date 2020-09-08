@@ -11,8 +11,6 @@
 #include "OpenGLSupport.h"
 #include "shaders.h"
 
-struct retro_hw_render_callback hw_render;
-
 extern bool enable_opengl;
 extern bool using_opengl;
 extern bool refresh_opengl;
