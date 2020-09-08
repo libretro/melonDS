@@ -440,9 +440,9 @@ static void render_frame(void)
       else
       {
          if(screen_layout_data.enable_top_screen)
-            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], 0, false);
+            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset, false);
          if(screen_layout_data.enable_bottom_screen)
-            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], 0, false);
+            copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset, false);
 
          if(cursor_enabled(&input_state) && current_screen_layout != ScreenLayout::TopOnly)
             draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
