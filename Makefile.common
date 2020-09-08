@@ -77,10 +77,11 @@ SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c \
 DEFINES += -DHAVE_THREADS
 endif
 
+# TODO: re-add when neon is implemented upstream
 ifeq ($(HAVE_NEON), 1)
-SOURCES_CXX += $(MELON_DIR)/GPU2D_Neon.cpp
+# SOURCES_CXX += $(MELON_DIR)/GPU2D_Neon.cpp
 
-DEFINES += -DNEONGPU_ENABLED
+# DEFINES += -DNEONGPU_ENABLED
 endif
 
 ifdef JIT_ARCH
