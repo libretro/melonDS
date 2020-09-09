@@ -338,6 +338,7 @@ else
       CXX = x86_64-w64-mingw32-g++
 	  LDFLAGS += -lopengl32
       HAVE_OPENGL=1
+	  HAVE_THREADS=1
 	  JIT_ARCH=x64
    endif
 endif
