@@ -327,6 +327,9 @@ static void check_variables(bool init)
       }
    }
 
+   // Running the software rendering thread at the same time as OpenGL is used will cause segfaulty on cleanup
+   if(enable_opengl) video_settings.Soft_Threaded = false;
+
    var.key = "melonds_opengl_resolution";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
