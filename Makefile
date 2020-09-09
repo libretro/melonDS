@@ -337,7 +337,7 @@ else
    	  CC = x86_64-w64-mingw32-gcc
       CXX = x86_64-w64-mingw32-g++
 	  LDFLAGS += -lopengl32
-	  ASFLAGS = -DWIN64
+	  ASFLAGS += -DWIN64
       HAVE_OPENGL=1
 	  HAVE_THREADS=1
 	  JIT_ARCH=x64
@@ -354,6 +354,11 @@ ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g
 else
    CXXFLAGS += -O3 # -DNDEBUG
+
+   ifdef MSYSTEM
+      # Seems to cause issues when crosscompiling with mingw64 and -O3
+      CXXFLAGS += -fno-tree-vectorize
+   endif
 endif
 
 include Makefile.common
