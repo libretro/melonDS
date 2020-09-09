@@ -40,6 +40,8 @@ bool enable_opengl = false;
 bool using_opengl = false;
 bool refresh_opengl = true;
 bool swapped_screens = false;
+bool toggle_swap_screen = false;
+bool swap_screen_toggled = false;
 
 enum CurrentRenderer
 {
@@ -135,8 +137,8 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef JIT_ENABLED
    std::string jit_blocksize = "JIT block size; ";
 
-   static const int MAX_JIT_BLOCKSIZE = 32;
-   static const int DEFAULT_BLOCK_SIZE = 10;
+   static const int MAX_JIT_BLOCKSIZE = 100;
+   static const int DEFAULT_BLOCK_SIZE = 32;
 
    jit_blocksize.append(std::to_string(DEFAULT_BLOCK_SIZE) + "|");
 
@@ -156,6 +158,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
       { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only|Hybrid Top|Hybrid Bottom" },
       { "melonds_hybrid_ratio", "Hybrid ratio; 2|3" },
+      { "melonds_swapscreen_mode", "Swap Screen mode; Toggle|Hold" },
 #ifdef HAVE_THREADS
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
 #endif
@@ -167,8 +170,8 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef JIT_ENABLED
       { "melonds_jit_enable", "JIT Enable (Restart); enabled|disabled" },
       { "melonds_jit_block_size", jit_blocksize.c_str() },
-      { "melonds_jit_branch_optimisations", "JIT Branch optimisations; disabled|enabled" },
-      { "melonds_jit_literal_optimisations", "JIT Literal optimisations; disabled|enabled" },
+      { "melonds_jit_branch_optimisations", "JIT Branch optimisations; enabled|disabled" },
+      { "melonds_jit_literal_optimisations", "JIT Literal optimisations; enabled|disabled" },
 #endif
       { 0, 0 }
    };
@@ -272,6 +275,12 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value != NULL)
    {
       screen_layout_data.hybrid_ratio = std::stoi(var.value);
+   }
+
+   var.key = "melonds_swapscreen_mode";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value != NULL)
+   {
+      toggle_swap_screen = !strcmp(var.value, "Toggle");
    }
 
 #ifdef HAVE_THREADS
@@ -461,11 +470,23 @@ void retro_run(void)
 
    if (input_state.swap_screens_btn != swapped_screens)
    {
-      swapped_screens = input_state.swap_screens_btn; 
-      update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
-#ifdef HAVE_OPENGL
-      refresh_opengl = true;
-#endif
+      if (toggle_swap_screen)
+      {
+         if (swapped_screens == false)
+         {
+            swap_screen_toggled = !swap_screen_toggled;
+            update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swap_screen_toggled);
+            refresh_opengl = true;
+         }
+
+         swapped_screens = input_state.swap_screens_btn; 
+      }
+      else
+      {
+         swapped_screens = input_state.swap_screens_btn; 
+         update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
+         refresh_opengl = true;
+      }
    }
 
    if (input_state.holding_noise_btn)
