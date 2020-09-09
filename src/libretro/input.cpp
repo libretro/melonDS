@@ -58,8 +58,8 @@ void update_input(InputState *state)
 
                state->touching = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
 
-               state->touch_x = Clamp(state->touch_x + mouse_x, 0, VIDEO_WIDTH);
-               state->touch_y = Clamp(state->touch_y + mouse_y, 0, VIDEO_HEIGHT);
+               state->touch_x = Clamp(state->touch_x + mouse_x, 0, VIDEO_WIDTH - 1);
+               state->touch_y = Clamp(state->touch_y + mouse_y, 0, VIDEO_HEIGHT - 1);
             }
 
             break;
@@ -79,8 +79,8 @@ void update_input(InputState *state)
                {
                   state->touching = true;
 
-                  state->touch_x = (x - screen_layout_data.touch_offset_x) * VIDEO_WIDTH / screen_layout_data.screen_width;
-                  state->touch_y = (y - screen_layout_data.touch_offset_y) * VIDEO_HEIGHT / screen_layout_data.screen_height;
+                  state->touch_x = Clamp((x - screen_layout_data.touch_offset_x) * VIDEO_WIDTH / screen_layout_data.screen_width, 0, VIDEO_WIDTH - 1);
+                  state->touch_y = Clamp((y - screen_layout_data.touch_offset_y) * VIDEO_HEIGHT / screen_layout_data.screen_height, 0, VIDEO_HEIGHT - 1);
                }
             }
             else if(state->touching)
@@ -93,8 +93,8 @@ void update_input(InputState *state)
             int16_t joystick_x = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / 2048;
             int16_t joystick_y = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
 
-            state->touch_x = Clamp(state->touch_x + joystick_x, 0, VIDEO_WIDTH);
-            state->touch_y = Clamp(state->touch_y + joystick_y, 0, VIDEO_HEIGHT);
+            state->touch_x = Clamp(state->touch_x + joystick_x, 0, VIDEO_WIDTH - 1);
+            state->touch_y = Clamp(state->touch_y + joystick_y, 0, VIDEO_HEIGHT - 1);
 
             state->touching = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3);
 
