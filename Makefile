@@ -337,6 +337,7 @@ else
    	  CC = x86_64-w64-mingw32-gcc
       CXX = x86_64-w64-mingw32-g++
 	  LDFLAGS += -lopengl32
+	  ASFLAGS = -DWIN64
       HAVE_OPENGL=1
 	  HAVE_THREADS=1
 	  JIT_ARCH=x64
@@ -413,7 +414,7 @@ endif
 	$(CXX) $(CXXFLAGS) $(fpic) -c $(OBJOUT)$@ $<
 
 %.o: %.s
-	$(CC) $(CFLAGS) $(fpic) -x assembler-with-cpp -c $(OBJOUT)$@ $<
+	$(CC) $(CFLAGS) $(fpic) -x assembler-with-cpp $(ASFLAGS) -c $(OBJOUT)$@ $<
 
 clean:
 	rm -f $(OBJECTS) $(TARGET)
