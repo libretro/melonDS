@@ -34,7 +34,7 @@ void update_input(InputState *state)
 
    NDS::SetKeyMask(input_mask);
 
-   bool lid_closed_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3);
+   bool lid_closed_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3);
    if(lid_closed_btn != state->lid_closed)
    {
       NDS::SetLidClosed(lid_closed_btn);
@@ -94,7 +94,7 @@ void update_input(InputState *state)
             state->touch_x = Clamp(state->touch_x + joystick_x, 0, VIDEO_WIDTH);
             state->touch_y = Clamp(state->touch_y + joystick_y, 0, VIDEO_HEIGHT);
 
-            state->touching = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3);
+            state->touching = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3);
 
             break;
       }
@@ -112,5 +112,6 @@ void update_input(InputState *state)
    else if(has_touched)
    {
       NDS::ReleaseScreen();
+      has_touched = false;
    }
 }
