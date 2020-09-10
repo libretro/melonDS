@@ -172,6 +172,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_jit_block_size", jit_blocksize.c_str() },
       { "melonds_jit_branch_optimisations", "JIT Branch optimisations; enabled|disabled" },
       { "melonds_jit_literal_optimisations", "JIT Literal optimisations; enabled|disabled" },
+      { "melonds_jit_fast_memory", "JIT Fast memory; enabled|disabled" },
 #endif
       { 0, 0 }
    };
@@ -382,6 +383,15 @@ static void check_variables(bool init)
          Config::JIT_LiteralOptimisations = true;
       else
          Config::JIT_LiteralOptimisations = false;
+   }
+
+   var.key = "melonds_jit_fast_memory";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         Config::JIT_FastMemory = true;
+      else
+         Config::JIT_FastMemory = false;
    }
 #endif
 
