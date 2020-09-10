@@ -166,6 +166,7 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef HAVE_OPENGL
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
       { "melonds_opengl_resolution", opengl_resolution.c_str() },
+      { "melonds_opengl_better_polygons", "OpenGL Improved polygon splitting; disabled|enabled" },
 #endif
 #ifdef JIT_ENABLED
       { "melonds_jit_enable", "JIT Enable (Restart); enabled|disabled" },
@@ -345,6 +346,18 @@ static void check_variables(bool init)
    else
    {
       video_settings.GL_ScaleFactor = 1;
+   }
+
+   var.key = "melonds_opengl_better_polygons";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      bool enabled = !strcmp(var.value, "enabled");
+      gl_update |= enabled != video_settings.GL_BetterPolygons;
+
+      if (enabled)
+         video_settings.GL_BetterPolygons = true;
+      else
+         video_settings.GL_BetterPolygons = false;
    }
 
    if((using_opengl && gl_update) || layout != current_screen_layout)
