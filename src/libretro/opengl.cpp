@@ -132,37 +132,27 @@ static bool context_framebuffer_lock(void *data)
     return false;
 }
 
-static bool initialize_opengl_context(u32 context_type)
+bool initialize_opengl()
 {
    glsm_ctx_params_t params = {0};
 
-   params.context_type     = (retro_hw_context_type)context_type;
+   // melonds wants an opengl 3.1 context, so glcore is required for mesa compatibility
+   params.context_type     = RETRO_HW_CONTEXT_OPENGL_CORE;
+   params.major            = 3;
+   params.minor            = 1;
    params.context_reset    = context_reset;
    params.context_destroy  = context_destroy;
    params.environ_cb       = environ_cb;
    params.stencil          = false;
    params.framebuffer_lock = context_framebuffer_lock;
 
-   return glsm_ctl(GLSM_CTL_STATE_CONTEXT_INIT, &params);
-}
-
-bool initialize_opengl()
-{
-   u32 preferred_context;
-   bool found_context = false;
-   if (!environ_cb(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred_context))
-      preferred_context = RETRO_HW_CONTEXT_DUMMY;
-   // try requesting the right context for current driver
-   if (preferred_context == RETRO_HW_CONTEXT_OPENGL || preferred_context == RETRO_HW_CONTEXT_OPENGL_CORE)
-      found_context = initialize_opengl_context(preferred_context);
-   // if not found, try requesting every compatible context
-   if (!found_context)
-      found_context = initialize_opengl_context(RETRO_HW_CONTEXT_OPENGL_CORE);
-   if (!found_context)
-      found_context = initialize_opengl_context(RETRO_HW_CONTEXT_OPENGL);
-   if (!found_context)
+   if (!glsm_ctl(GLSM_CTL_STATE_CONTEXT_INIT, &params))
+   {
       log_cb(RETRO_LOG_ERROR, "Could not setup opengl context, falling back to software rasterization.\n");
-   return found_context;
+      return false;
+   }
+
+   return true;
 }
 
 void deinitialize_opengl_renderer(void)
