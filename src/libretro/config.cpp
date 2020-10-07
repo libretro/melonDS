@@ -31,6 +31,14 @@ namespace Config
     int DLDIEnable;
     char DLDISDPath[1024];
 
+    char FirmwareUsername[64];
+    int FirmwareLanguage;
+    int FirmwareFavouriteColour;
+    int FirmwareBirthdayMonth;
+    int FirmwareBirthdayDay;
+    char FirmwareMessage[1024];
+    bool FirmwareOverrideSettings;
+
     char DSiBIOS9Path[1024];
     char DSiBIOS7Path[1024];
     char DSiFirmwarePath[1024];
