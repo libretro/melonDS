@@ -592,6 +592,7 @@ bool retro_load_game(const struct retro_game_info *info)
    strcpy(Config::BIOS7Path, "bios7.bin");
    strcpy(Config::BIOS9Path, "bios9.bin");
    strcpy(Config::FirmwarePath, "firmware.bin");
+   strcpy(Config::FirmwareUsername, "MelonDS");
 
    struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "Left" },
@@ -622,6 +623,34 @@ bool retro_load_game(const struct retro_game_info *info)
    {
       log_cb(RETRO_LOG_INFO, "XRGB8888 is not supported.\n");
       return false;
+   }
+
+   unsigned language = RETRO_LANGUAGE_ENGLISH;
+   environ_cb(RETRO_ENVIRONMENT_GET_LANGUAGE, &language);
+   switch(language)
+   {
+     case RETRO_LANGUAGE_JAPANESE:
+       Config::FirmwareLanguage = 0;
+       break;
+
+     case RETRO_LANGUAGE_FRENCH:
+       Config::FirmwareLanguage = 2;
+       break;
+
+     case RETRO_LANGUAGE_GERMAN:
+       Config::FirmwareLanguage = 3;
+       break;
+
+     case RETRO_LANGUAGE_ITALIAN:
+       Config::FirmwareLanguage = 4;
+       break;
+
+     case RETRO_LANGUAGE_SPANISH:
+       Config::FirmwareLanguage = 5;
+       break;
+
+     default:
+       Config::FirmwareLanguage = 1; // English
    }
 
    check_variables(true);
