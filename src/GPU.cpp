@@ -323,12 +323,10 @@ void DeInitRenderer()
 
 void ResetRenderer()
 {
-#ifdef HAVE_OPENGL
     if (Renderer == 0)
     {
 #endif
         GPU3D::SoftRenderer::Reset();
-#ifdef HAVE_OPENGL
     }
 #ifdef OGLRENDERER_ENABLED
     else
@@ -373,12 +371,9 @@ void SetRenderSettings(int renderer, RenderSettings& settings)
 
     printf("%d\n", Renderer);
 
-#ifdef HAVE_OPENGL
     if (Renderer == 0)
     {
-#endif
         GPU3D::SoftRenderer::SetRenderSettings(settings);
-#ifdef HAVE_OPENGL
     }
 #ifdef OGLRENDERER_ENABLED
     else
