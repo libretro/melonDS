@@ -88,7 +88,9 @@ namespace Platform
    void Semaphore_Reset(Semaphore *sema)
    {
    #ifdef HAVE_THREADS
-      ssem_wait((ssem_t*)sema);
+      while (ssem_get((ssem_t*)sema) > 0) {
+        ssem_trywait((ssem_t*)sema);
+      }
    #endif
    }
 

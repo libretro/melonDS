@@ -443,7 +443,6 @@ static void render_frame(void)
          {
             if(using_opengl) deinitialize_opengl_renderer();
 #endif
-            GPU::InitRenderer(false);
             current_renderer = CurrentRenderer::Software;
 #ifdef HAVE_OPENGL
          }
@@ -630,6 +629,7 @@ bool retro_load_game(const struct retro_game_info *info)
    rom_path = std::string(info->path);
    save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(game_name) + ".sav";
 
+   GPU::InitRenderer(false);
    GPU::SetRenderSettings(false, video_settings);
    NDS::SetConsoleType(0);
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
