@@ -117,6 +117,21 @@ bool ssem_trywait(ssem_t *semaphore)
    return positive;
 }
 
+int ssem_get(ssem_t *semaphore)
+{
+   int val = 0;
+   if (!semaphore)
+      return 0;
+
+   slock_lock(semaphore->mutex);
+
+   val = semaphore->value;
+
+   slock_unlock(semaphore->mutex);
+
+   return val;
+}
+
 void ssem_signal(ssem_t *semaphore)
 {
    if (!semaphore)
