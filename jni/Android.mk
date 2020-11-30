@@ -1,9 +1,10 @@
 LOCAL_PATH := $(call my-dir)
 
-ROOT_DIR   := $(LOCAL_PATH)/..
-MELON_DIR  := $(ROOT_DIR)/src
-CORE_DIR   := $(MELON_DIR)/libretro
-JIT_ARCH   :=
+ROOT_DIR     := $(LOCAL_PATH)/..
+MELON_DIR    := $(ROOT_DIR)/src
+CORE_DIR     := $(MELON_DIR)/libretro
+JIT_ARCH     :=
+HAVE_THREADS := 1
 
 ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
   JIT_ARCH := aarch64
