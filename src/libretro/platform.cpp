@@ -94,10 +94,13 @@ namespace Platform
    #endif
    }
 
-   void Semaphore_Post(Semaphore *sema)
+   void Semaphore_Post(Semaphore *sema, int count)
    {
    #ifdef HAVE_THREADS
-      ssem_signal((ssem_t*)sema);
+       for (int i = 0; i < count; i++)
+      {
+         ssem_signal((ssem_t*)sema);
+      }
    #endif
    }
 
@@ -125,6 +128,31 @@ namespace Platform
          return (Semaphore*)sem;
    #endif
       return NULL;
+   }
+
+   Mutex* Mutex_Create()
+   {
+      return (Mutex*)slock_new();
+   }
+
+   void Mutex_Free(Mutex* mutex)
+   {
+      slock_free((slock_t*)mutex);
+   }
+
+   void Mutex_Lock(Mutex* mutex)
+   {
+      slock_lock((slock_t*)mutex);
+   }
+
+   void Mutex_Unlock(Mutex* mutex)
+   {
+      slock_unlock((slock_t*)mutex);
+   }
+
+   bool Mutex_TryLock(Mutex* mutex)
+   {
+      slock_try_lock((slock_t*)mutex);
    }
 
    void Thread_Free(Thread *thread)
