@@ -79,7 +79,9 @@ ifeq ($(platform), unix)
    LIBS +=-lpthread -lGL
    HAVE_OPENGL=1
    HAVE_THREADS=1
-   JIT_ARCH=x64
+   ifeq ($(ARCH),x86_64)
+      JIT_ARCH=x64
+   endif
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
@@ -353,14 +355,18 @@ else
 	  ASFLAGS += -DWIN64
       HAVE_OPENGL=1
 	  HAVE_THREADS=1
+      ifeq ($(ARCH),x86_64)
 	  JIT_ARCH=x64
+      endif
    endif
 endif
 
 ifneq (,$(findstring msvc,$(platform)))
 CFLAGS += -D_CRT_SECURE_NO_WARNINGS
 CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
-JIT_ARCH=x64
+   ifeq ($(ARCH),x86_64)
+      JIT_ARCH=x64
+   endif
 endif
 
 ifeq ($(DEBUG), 1)
