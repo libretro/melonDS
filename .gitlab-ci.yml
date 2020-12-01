@@ -1,57 +1,58 @@
-variables:
-  STATIC_RETROARCH_BRANCH: master
+.core-defs:
+  variables:
+    CORENAME: melonds
 
 include:
   template: Jobs/Code-Quality.gitlab-ci.yml
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/libnx-static.yml'
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/linux-x64.yml'
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/windows-x64-mingw.yml'
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/android-jni.yml'
   
-code_quality:
-  artifacts:
-    paths: [gl-code-quality-report.json]
-
 stages:
   - build-prepare
   - build-shared
   - build-static
   - test
 
+#Desktop
 libretro-build-linux-x64:
-  image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-amd64-ubuntu:latest
-  stage: build-shared
-  script:
-    - make -j10
-  artifacts:
-    paths:
-    - melonds_libretro.so
-    expire_in: 1 month
-  dependencies: []
+  extends:
+    - .libretro-linux-x64-make-default
+    - .core-defs
 
 libretro-build-windows-x64:
-  image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-amd64-ubuntu:latest
-  stage: build-shared
-  script:
-    - make -j10 platform=win64 MSYSTEM=MINGW64
-  artifacts:
-    paths:
-    - melonds_libretro.dll
-    expire_in: 1 month
-  dependencies: []
+  extends:
+    - .libretro-windows-x64-mingw-make-default
+    - .core-defs
 
+# Android
+android-armeabi-v7a:
+  extends:
+    - .libretro-android-jni-armeabi-v7a
+    - .core-defs
+
+android-arm64-v8a:
+  extends:
+    - .libretro-android-jni-arm64-v8a
+    - .core-defs
+
+android-x86_64:
+  extends:
+    - .libretro-android-jni-x86_64
+    - .core-defs
+    
+android-x86:
+  extends:
+    - .libretro-android-jni-x86
+    - .core-defs
+
+# Static
 libretro-build-libnx-aarch64:
-  image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-libnx-devkitpro:latest
-  stage: build-static
-  script:
-    - make -j10 platform=libnx
-    - wget -O retroarch-precompiled.zip "https://$CI_SERVER_HOST/libretro/RetroArch/-/jobs/artifacts/$STATIC_RETROARCH_BRANCH/download?job=build-static-retroarch-libnx-aarch64"
-    - unzip retroarch-precompiled.zip
-    - rm -f retroarch-precompiled.zip
-    - mv melonds_libretro_libnx.a retroarch-precompiled/libretro_libnx.a
-    - cd retroarch-precompiled/
-    - make -f Makefile.libnx -j10
-    - mv retroarch_switch.nro ../melonds_libretro_libnx.nro
-    - mv retroarch_switch.elf ../melonds_libretro_libnx.elf
-    - cd ../
-  artifacts:
-    paths:
-    - melonds_libretro_libnx.nro
-    - melonds_libretro_libnx.elf
-    expire_in: 1 month
+  extends:
+    - .libretro-libnx-static-retroarch-master
+    - .core-defs
