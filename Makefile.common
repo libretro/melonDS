@@ -100,7 +100,7 @@ SOURCES_CXX += $(MELON_DIR)/dolphin/Arm64Emitter.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_ALU.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_LoadStore.cpp \
                 $(MELON_DIR)/ARMJIT_A64/ARMJIT_Branch.cpp
-SOURCES_S += $(MELON_DIR)/ARMJIT_A64/ARMJIT_Linkage.s
+SOURCES_S += $(MELON_DIR)/ARMJIT_A64/ARMJIT_Linkage.S
 INCFLAGS += -I$(MELON_DIR)/ARMJIT_A64/
 
 DEFINES += -DARCHITECTURE_ARM64
@@ -115,7 +115,7 @@ SOURCES_CXX += $(MELON_DIR)/dolphin/x64ABI.cpp \
                 $(MELON_DIR)/ARMJIT_x64/ARMJIT_Compiler.cpp \
                 $(MELON_DIR)/ARMJIT_x64/ARMJIT_GenOffsets.cpp \
                 $(MELON_DIR)/ARMJIT_x64/ARMJIT_LoadStore.cpp
-SOURCES_S += $(MELON_DIR)/ARMJIT_x64/ARMJIT_Linkage.s
+SOURCES_S += $(MELON_DIR)/ARMJIT_x64/ARMJIT_Linkage.S
 INCFLAGS += -I$(MELON_DIR)/ARMJIT_x64/
 
 DEFINES += -DARCHITECTURE_X64
