@@ -101,7 +101,7 @@ void ssem_wait(ssem_t *semaphore)
 bool ssem_trywait(ssem_t *semaphore)
 {
    if (!semaphore)
-      return;
+      return false;
 
    slock_lock(semaphore->mutex);
 
