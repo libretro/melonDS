@@ -347,18 +347,18 @@ else
    CC ?= gcc
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LDFLAGS += -lws2_32 -lwinmm
+   LDFLAGS += -lws2_32 -lwinmm -lopengl32
+   HAVE_OPENGL=1
+   HAVE_THREADS=1
 
    ifeq ($(MSYSTEM),MINGW64)
-   	  CC = x86_64-w64-mingw32-gcc
+      CC = x86_64-w64-mingw32-gcc
       CXX = x86_64-w64-mingw32-g++
-	  LDFLAGS += -lopengl32
-	  ASFLAGS += -DWIN64
-      HAVE_OPENGL=1
-	  HAVE_THREADS=1
-      ifeq ($(ARCH),x86_64)
-	  JIT_ARCH=x64
-      endif
+      ASFLAGS += -DWIN64
+      JIT_ARCH=x64
+   else ifeq ($(MSYSTEM),MINGW64)
+      CC = i686-w64-mingw32-gcc
+      CXX = i686-w64-mingw32-g++
    endif
 endif
 
