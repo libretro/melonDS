@@ -377,7 +377,7 @@ endif
 
 include Makefile.common
 
-OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o) $(SOURCES_S:.s=.o)
+OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o) $(SOURCES_S:.S=.o)
 
 CXXFLAGS += -std=gnu++14
 
@@ -430,7 +430,7 @@ endif
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(fpic) -c $(OBJOUT)$@ $<
 
-%.o: %.s
+%.o: %.S
 	$(CC) $(CFLAGS) $(fpic) -x assembler-with-cpp $(ASFLAGS) -c $(OBJOUT)$@ $<
 
 clean:
