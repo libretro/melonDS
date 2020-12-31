@@ -351,13 +351,13 @@ else
    HAVE_THREADS=1
 
    ifeq ($(MSYSTEM),MINGW64)
-      CC = x86_64-w64-mingw32-gcc
-      CXX = x86_64-w64-mingw32-g++
+      CC ?= x86_64-w64-mingw32-gcc
+      CXX ?= x86_64-w64-mingw32-g++
       ASFLAGS += -DWIN64
       JIT_ARCH=x64
    else ifeq ($(MSYSTEM),MINGW64)
-      CC = i686-w64-mingw32-gcc
-      CXX = i686-w64-mingw32-g++
+      CC ?= i686-w64-mingw32-gcc
+      CXX ?= i686-w64-mingw32-g++
    endif
 endif
 
