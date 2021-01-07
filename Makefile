@@ -77,11 +77,16 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGL
-   HAVE_OPENGL=1
+   LIBS += -lpthread
    HAVE_THREADS=1
+   ifeq ($(platform),$(filter $(platform),x86 x86_64))
+     LIBS += -lGL
+     HAVE_OPENGL=1
+   endif
    ifeq ($(ARCH),x86_64)
       JIT_ARCH=x64
+   else ifeq ($(ARCH),arm64)
+      JIT_ARCH=aarch64
    endif
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
