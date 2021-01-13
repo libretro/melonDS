@@ -204,8 +204,8 @@ else ifeq ($(platform), rpi4_64)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGL
-   HAVE_OPENGL=0
+   LIBS +=-lpthread -lGLESv2
+   HAVE_OPENGLES3=1
    HAVE_THREADS=1
    JIT_ARCH=aarch64
    
