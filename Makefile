@@ -234,6 +234,19 @@ else ifeq ($(platform), odroidn2)
    HAVE_OPENGLES3 = 1
    HAVE_THREADS = 1
    JIT_ARCH = aarch64
+   
+# Orange Pi Zero 2
+else ifeq ($(platform), orangepizero2)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
 
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
