@@ -205,10 +205,10 @@ else ifeq ($(platform), rpi4_64)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGLESv2
-   HAVE_OPENGLES3=1
-   HAVE_THREADS=1
-   JIT_ARCH=aarch64
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
    
 # Odroid C4
 else ifeq ($(platform), odroidc4)
@@ -218,10 +218,10 @@ else ifeq ($(platform), odroidc4)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGLESv2
-   HAVE_OPENGLES3=1
-   HAVE_THREADS=1
-   JIT_ARCH=aarch64
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
    
 # Odroid N2 / VIM3
 else ifeq ($(platform), odroidn2)
@@ -231,10 +231,10 @@ else ifeq ($(platform), odroidn2)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGLESv2
-   HAVE_OPENGLES3=1
-   HAVE_THREADS=1
-   JIT_ARCH=aarch64   
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
 
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
