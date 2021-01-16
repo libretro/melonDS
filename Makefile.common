@@ -42,10 +42,11 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/GBACart.cpp \
                     $(MELON_DIR)/GPU.cpp \
                     $(MELON_DIR)/GPU2D.cpp \
-                    $(MELON_DIR)/GPU2DSoft.cpp \
+                    $(MELON_DIR)/GPU2D_Soft.cpp \
                     $(MELON_DIR)/GPU3D.cpp \
                     $(MELON_DIR)/GPU3D_Soft.cpp \
                     $(MELON_DIR)/NDSCart.cpp \
+                    $(MELON_DIR)/NDSCart_SRAMManager.cpp \
                     $(MELON_DIR)/RTC.cpp \
                     $(MELON_DIR)/Savestate.cpp \
                     $(MELON_DIR)/SPI.cpp \
