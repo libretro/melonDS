@@ -33,6 +33,7 @@
 
 #include <streams/file_stream.h>
 #include <streams/file_stream_transforms.h>
+#include <retro_timers.h>
 
 #include "types.h"
 #include "utils.h"
@@ -379,4 +380,9 @@ namespace Platform
       return (void*)nullptr;
    }
 #endif
+
+   void Sleep(u64 usecs)
+   {
+      retro_sleep(usecs / 1000);
+   }
 };
