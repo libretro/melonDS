@@ -37,6 +37,11 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 	system_platform = win
 endif
 
+# arch
+ifeq (,$(ARCH))
+   ARCH = $(shell uname -m)
+endif
+
 CORE_DIR    += ./src/libretro
 MELON_DIR     += ./src
 TARGET_NAME := melonds
@@ -79,7 +84,7 @@ ifeq ($(platform), unix)
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
    LIBS += -lpthread
    HAVE_THREADS=1
-   ifeq ($(platform),$(filter $(platform),x86 x86_64))
+   ifneq ($(filter $(ARCH),x86 x86_64),)
      LIBS += -lGL
      HAVE_OPENGL=1
    endif
