@@ -82,6 +82,7 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   CFLAGS += -D_GNU_SOURCE
    LIBS += -lpthread
    HAVE_THREADS=1
    ifneq ($(filter $(ARCH),x86 x86_64),)
