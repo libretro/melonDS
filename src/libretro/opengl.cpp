@@ -14,9 +14,9 @@
 extern bool enable_opengl;
 extern bool using_opengl;
 extern bool refresh_opengl;
+extern bool opengl_linear_filtering;
 
 static bool initialized_glsm;
-static GLuint screen_shader[3];
 static GLuint shader[3];
 static GLuint screen_framebuffer_texture;
 static float screen_vertices[2 * 3 * 2 * 4];
@@ -27,7 +27,7 @@ struct
    GLfloat uScreenSize[2];
    u32 u3DScale;
    u32 uFilterMode;
-   GLint cursorPos[4];
+   GLfloat cursorPos[4];
 
 } GL_ShaderConfig;
 static GLuint ubo;
@@ -36,10 +36,7 @@ static bool setup_opengl(void)
 {
    GPU::InitRenderer(true);
 
-   if (!OpenGL::BuildShaderProgram(screen_vertex_shader, screen_fragment_shader, screen_shader, "ScreenShader"))
-      return false;
-
-   if (!OpenGL::BuildShaderProgram(vertex_shader, fragment_shader, shader, "AccelShader"))
+   if (!OpenGL::BuildShaderProgram(vertex_shader, fragment_shader, shader, "LibretroShader"))
       return false;
 
    glBindAttribLocation(shader[2], 0, "vPosition");
@@ -57,8 +54,6 @@ static bool setup_opengl(void)
    glUseProgram(shader[2]);
    uni_id = glGetUniformLocation(shader[2], "ScreenTex");
    glUniform1i(uni_id, 0);
-   uni_id = glGetUniformLocation(shader[2], "_3DTex");
-   glUniform1i(uni_id, 1);
 
    memset(&GL_ShaderConfig, 0, sizeof(GL_ShaderConfig));
 
@@ -167,13 +162,13 @@ void setup_opengl_frame_state(void)
 
    GPU::SetRenderSettings(true, video_settings);
 
-   GL_ShaderConfig.uScreenSize[0] = screen_layout_data.buffer_width;
-   GL_ShaderConfig.uScreenSize[1] = screen_layout_data.buffer_height;
-   GL_ShaderConfig.u3DScale = video_settings.GL_ScaleFactor;
-   GL_ShaderConfig.cursorPos[0] = -1;
-   GL_ShaderConfig.cursorPos[1] = -1;
-   GL_ShaderConfig.cursorPos[2] = -1;
-   GL_ShaderConfig.cursorPos[3] = -1;
+   GL_ShaderConfig.uScreenSize[0] = (float)screen_layout_data.buffer_width;
+   GL_ShaderConfig.uScreenSize[1] = (float)screen_layout_data.buffer_height;
+   GL_ShaderConfig.u3DScale = (float)video_settings.GL_ScaleFactor;
+   GL_ShaderConfig.cursorPos[0] = -1.0f;
+   GL_ShaderConfig.cursorPos[1] = -1.0f;
+   GL_ShaderConfig.cursorPos[2] = -1.0f;
+   GL_ShaderConfig.cursorPos[3] = -1.0f;
 
    glBindBuffer(GL_UNIFORM_BUFFER, ubo);
    void* unibuf = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
@@ -233,21 +228,23 @@ void setup_opengl_frame_state(void)
       screen_vertices[(4 * i) + 2] = t_x; \
       screen_vertices[(4 * i) + 3] = t_y;
 
+   const float pixel_pad = 1.0f / (192 * 2 + 2);
+
    // top screen
    SETVERTEX(0, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
-   SETVERTEX(1, top_screen_x, top_screen_y + screen_height * top_screen_scale, 0.0f, VIDEO_HEIGHT); // bottom left
-   SETVERTEX(2, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+   SETVERTEX(1, top_screen_x, top_screen_y + screen_height * top_screen_scale, 0.0f, 0.5f - pixel_pad); // bottom left
+   SETVERTEX(2, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, 1.0f, 0.5f - pixel_pad); // bottom right
    SETVERTEX(3, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
-   SETVERTEX(4, top_screen_x + screen_width * top_screen_scale, top_screen_y, VIDEO_WIDTH, 0.0f); // top right
-   SETVERTEX(5, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+   SETVERTEX(4, top_screen_x + screen_width * top_screen_scale, top_screen_y, 1.0f, 0.0f); // top right
+   SETVERTEX(5, top_screen_x + screen_width * top_screen_scale, top_screen_y + screen_height * top_screen_scale, 1.0f, 0.5f - pixel_pad); // bottom right
 
    // bottom screen
-   SETVERTEX(6, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
-   SETVERTEX(7, bottom_screen_x, bottom_screen_y + screen_height * bottom_screen_scale, 0.0f, VIDEO_HEIGHT * 2.0f); // bottom left
-   SETVERTEX(8, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, VIDEO_WIDTH,  VIDEO_HEIGHT * 2.0f); // bottom right
-   SETVERTEX(9, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
-   SETVERTEX(10, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y, VIDEO_WIDTH, VIDEO_HEIGHT); // top right
-   SETVERTEX(11, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, VIDEO_WIDTH, VIDEO_HEIGHT * 2.0f); // bottom right
+   SETVERTEX(6, bottom_screen_x, bottom_screen_y, 0.0f, 0.5f - pixel_pad); // top left
+   SETVERTEX(7, bottom_screen_x, bottom_screen_y + screen_height * bottom_screen_scale, 0.0f, 1.0f); // bottom left
+   SETVERTEX(8, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, 1.0f, 1.0f); // bottom right
+   SETVERTEX(9, bottom_screen_x, bottom_screen_y, 0.0f, 0.5f - pixel_pad); // top left
+   SETVERTEX(10, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y, 1.0f, 0.5f - pixel_pad); // top right
+   SETVERTEX(11, bottom_screen_x + screen_width * bottom_screen_scale, bottom_screen_y + screen_height * bottom_screen_scale, 1.0f, 1.0f); // bottom right
 
    glBindBuffer(GL_ARRAY_BUFFER, vbo);
    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(screen_vertices), screen_vertices);
@@ -266,10 +263,10 @@ void render_opengl_frame(bool sw)
 
    if(virtual_cursor)
    {
-      GL_ShaderConfig.cursorPos[0] = input_state.touch_x - CURSOR_SIZE;
-      GL_ShaderConfig.cursorPos[1] = input_state.touch_y - CURSOR_SIZE;
-      GL_ShaderConfig.cursorPos[2] = input_state.touch_x + CURSOR_SIZE;
-      GL_ShaderConfig.cursorPos[3] = input_state.touch_y + CURSOR_SIZE;
+      GL_ShaderConfig.cursorPos[0] = (((float)(input_state.touch_x) - (float)(CURSOR_SIZE)) / ((float)VIDEO_HEIGHT * 1.35));
+      GL_ShaderConfig.cursorPos[1] = (((float)(input_state.touch_y) - (float)(CURSOR_SIZE)) / ((float)VIDEO_WIDTH * 1.5)) + 0.5f;
+      GL_ShaderConfig.cursorPos[2] = (((float)(input_state.touch_x) + (float)(CURSOR_SIZE)) / ((float)VIDEO_HEIGHT * 1.35));
+      GL_ShaderConfig.cursorPos[3] = (((float)(input_state.touch_y) + (float)(CURSOR_SIZE)) / ((float)VIDEO_WIDTH * 1.5)) + 0.5f;
 
       glBindBuffer(GL_UNIFORM_BUFFER, ubo);
       void* unibuf = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
@@ -277,23 +274,20 @@ void render_opengl_frame(bool sw)
       glUnmapBuffer(GL_UNIFORM_BUFFER);
    }
 
+   OpenGL::UseShaderProgram(shader);
+
    glDisable(GL_DEPTH_TEST);
    glDisable(GL_STENCIL_TEST);
    glDisable(GL_BLEND);
-   glColorMaski(0, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
    glViewport(0, 0, screen_layout_data.buffer_width, screen_layout_data.buffer_height);
 
-   OpenGL::UseShaderProgram(sw ? screen_shader : shader);
-
-   glClearColor(0, 0, 0, 1);
-   glClear(GL_COLOR_BUFFER_BIT);
-
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, screen_framebuffer_texture);
 
    if (sw)
    {
+      glBindTexture(GL_TEXTURE_2D, screen_framebuffer_texture);
+
       if (GPU::Framebuffer[frontbuf][0] && GPU::Framebuffer[frontbuf][1])
       {
          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 192, GL_RGBA_INTEGER,
@@ -304,17 +298,12 @@ void render_opengl_frame(bool sw)
    }
    else
    {
-      if (GPU::Framebuffer[frontbuf][0] && GPU::Framebuffer[frontbuf][1])
-      {
-         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256*3 + 1, 192, GL_RGBA_INTEGER,
-                        GL_UNSIGNED_BYTE, GPU::Framebuffer[frontbuf][0]);
-         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 192, 256*3 + 1, 192, GL_RGBA_INTEGER,
-                        GL_UNSIGNED_BYTE, GPU::Framebuffer[frontbuf][1]);
-      }
+      GPU::GLCompositor::BindOutputTexture();
    }
 
-   glActiveTexture(GL_TEXTURE1);
-   if(!sw) GPU3D::GLRenderer::SetupAccelFrame();
+   GLint filter = opengl_linear_filtering ? GL_LINEAR : GL_NEAREST;
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 
    glBindBuffer(GL_ARRAY_BUFFER, vbo);
    glBindVertexArray(vao);

@@ -38,6 +38,7 @@ GPU::RenderSettings video_settings;
 
 bool enable_opengl = false;
 bool using_opengl = false;
+bool opengl_linear_filtering = false;
 bool refresh_opengl = true;
 bool swapped_screens = false;
 bool toggle_swap_screen = false;
@@ -167,6 +168,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
       { "melonds_opengl_resolution", opengl_resolution.c_str() },
       { "melonds_opengl_better_polygons", "OpenGL Improved polygon splitting; disabled|enabled" },
+      { "melonds_opengl_filtering", "OpenGL Improved polygon splitting; nearest|linear" },
 #endif
 #ifdef JIT_ENABLED
       { "melonds_jit_enable", "JIT Enable (Restart); enabled|disabled" },
@@ -358,6 +360,12 @@ static void check_variables(bool init)
          video_settings.GL_BetterPolygons = true;
       else
          video_settings.GL_BetterPolygons = false;
+   }
+
+   var.key = "melonds_opengl_filtering";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      opengl_linear_filtering  = !strcmp(var.value, "linear");
    }
 
    if((using_opengl && gl_update) || layout != current_screen_layout)
