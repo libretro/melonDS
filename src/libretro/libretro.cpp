@@ -168,7 +168,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
       { "melonds_opengl_resolution", opengl_resolution.c_str() },
       { "melonds_opengl_better_polygons", "OpenGL Improved polygon splitting; disabled|enabled" },
-      { "melonds_opengl_filtering", "OpenGL Improved polygon splitting; nearest|linear" },
+      { "melonds_opengl_filtering", "OpenGL filtering; nearest|linear" },
 #endif
 #ifdef JIT_ENABLED
       { "melonds_jit_enable", "JIT Enable (Restart); enabled|disabled" },
