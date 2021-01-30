@@ -154,6 +154,7 @@ namespace Platform
    bool Mutex_TryLock(Mutex* mutex)
    {
       slock_try_lock((slock_t*)mutex);
+      return true;
    }
 
    void Thread_Free(Thread *thread)

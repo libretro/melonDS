@@ -28,10 +28,22 @@ include:
   - project: 'libretro-infrastructure/ci-templates'
     file: '/linux-i686.yml'
 
+  # MacOS 64-bit
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/osx-x64.yml'
+
+  # MacOS ARM 64-bit
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/osx-arm64.yml'
+
   ################################## CELLULAR ################################
   # Android
   - project: 'libretro-infrastructure/ci-templates'
     file: '/android-jni.yml'
+
+  # iOS 9
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/ios9.yml'
     
   ################################## CONSOLES ################################
   # Nintendo Switch
@@ -74,6 +86,18 @@ libretro-build-linux-i686:
     - .libretro-linux-i686-make-default
     - .core-defs
 
+# MacOS 64-bit
+libretro-build-osx-x64:
+  extends:
+    - .libretro-osx-x64-make-default
+    - .core-defs
+
+# MacOS ARM 64-bit
+libretro-build-osx-arm64:
+  extends:
+    - .libretro-osx-arm64-make-default
+    - .core-defs
+
 ################################### CELLULAR #################################
 # Android ARMv7a
 android-armeabi-v7a:
@@ -97,6 +121,12 @@ android-x86_64:
 android-x86:
   extends:
     - .libretro-android-jni-x86
+    - .core-defs
+
+# iOS 9
+libretro-build-ios-9:
+  extends:
+    - .libretro-ios9-make-default
     - .core-defs
 
 ################################### CONSOLES #################################
