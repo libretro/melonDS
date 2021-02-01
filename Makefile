@@ -71,7 +71,7 @@ ifeq ($(platform), unix)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
    CFLAGS += -D_GNU_SOURCE
-   LIBS += -lpthread
+   LIBS += -lpthread -lrt
    HAVE_THREADS=1
    ifneq ($(filter $(ARCH),x86 x86_64),)
      LIBS += -lGL
