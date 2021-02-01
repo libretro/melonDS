@@ -1,4 +1,3 @@
-MELONDS_VERSION = "0.9.1"
 STATIC_LINKING := 0
 AR             := ar
 
@@ -49,7 +48,7 @@ CORE_DIR    += ./src/libretro
 MELON_DIR     += ./src
 TARGET_NAME := melonds
 LIBS		    = -lm
-DEFINES := -DMELONDS_VERSION=\"$(MELONDS_VERSION)\"
+DEFINES :=
 
 ifneq ($(findstring Haiku,$(shell uname -s)),)
 LIBS += -lnetwork
