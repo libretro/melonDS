@@ -259,7 +259,11 @@ void render_opengl_frame(bool sw)
 
    glBindFramebuffer(GL_FRAMEBUFFER, glsm_get_current_framebuffer());
 
-   if(refresh_opengl) setup_opengl_frame_state();
+   if(refresh_opengl)
+   {
+      setup_opengl_frame_state();
+      glClearColor(0, 0, 0, 1);
+   }
 
    if(virtual_cursor)
    {
