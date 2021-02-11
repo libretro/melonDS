@@ -49,16 +49,19 @@ namespace NDSCart_SRAMManager
 
     bool Init()
     {
+#ifndef __LIBRETRO__
         FlushThread = Platform::Thread_Create(FlushThreadFunc);
         FlushThreadRunning = true;
 
         SecondaryBufferLock = Platform::Mutex_Create();
+#endif
 
         return true;
     }
 
     void DeInit()
     {
+#ifndef __LIBRETRO__
         if (FlushThreadRunning)
         {
             FlushThreadRunning = false;
@@ -66,6 +69,7 @@ namespace NDSCart_SRAMManager
             Platform::Thread_Free(FlushThread);
             FlushSecondaryBufferToFile();
         }
+#endif
 
         delete SecondaryBuffer;
 
@@ -77,7 +81,9 @@ namespace NDSCart_SRAMManager
         // Flush SRAM in case there is unflushed data from previous state.
         FlushSecondaryBufferToFile();
 
+#ifndef __LIBRETRO__
         Platform::Mutex_Lock(SecondaryBufferLock);
+#endif
 
         strncpy(Path, path, 1023);
         Path[1023] = '\0';
@@ -94,19 +100,26 @@ namespace NDSCart_SRAMManager
         PreviousFlushVersion = 0;
         TimeAtLastFlushRequest = 0;
 
+#ifndef __LIBRETRO__
         Platform::Mutex_Unlock(SecondaryBufferLock);
+#endif
     }
 
     void RequestFlush()
     {
+#ifndef __LIBRETRO__
         Platform::Mutex_Lock(SecondaryBufferLock);
+#endif
         printf("NDS SRAM: Flush requested\n");
         memcpy(SecondaryBuffer, Buffer, Length);
         FlushVersion++;
         TimeAtLastFlushRequest = time(NULL);
+#ifndef __LIBRETRO__
         Platform::Mutex_Unlock(SecondaryBufferLock);
+#endif
     }
-    
+
+#ifndef __LIBRETRO__
     void FlushThreadFunc()
     {
         for (;;)
@@ -124,7 +137,16 @@ namespace NDSCart_SRAMManager
             FlushSecondaryBufferToFile();
         }
     }
-    
+#else
+    void Flush()
+    {
+        if (TimeAtLastFlushRequest != 0 && difftime(time(NULL), TimeAtLastFlushRequest) > 2)
+        {
+            FlushSecondaryBufferToFile();
+        }
+    }
+#endif
+
     void FlushSecondaryBufferToFile()
     {
         if (FlushVersion == PreviousFlushVersion)
@@ -132,7 +154,9 @@ namespace NDSCart_SRAMManager
             return;
         }
 
+#ifndef __LIBRETRO__
         Platform::Mutex_Lock(SecondaryBufferLock);
+#endif
         FILE* f = Platform::OpenFile(Path, "wb");
         if (f)
         {
@@ -142,6 +166,8 @@ namespace NDSCart_SRAMManager
         }
         PreviousFlushVersion = FlushVersion;
         TimeAtLastFlushRequest = 0;
+#ifndef __LIBRETRO__
         Platform::Mutex_Unlock(SecondaryBufferLock);
+#endif
     }
 }

@@ -28,6 +28,10 @@ namespace NDSCart_SRAMManager
 
     void Setup(const char* path, u8* buffer, u32 length);
     void RequestFlush();
+
+#ifdef __LIBRETRO__
+    void Flush();
+#endif
 }
 
 #endif // NDSCART_SRAMMANAGER_H

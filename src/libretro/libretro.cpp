@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "Platform.h"
 #include "NDS.h"
+#include "NDSCart_SRAMManager.h"
 #include "GPU.h"
 #include "SPU.h"
 #include "version.h"
@@ -548,6 +549,8 @@ void retro_run(void)
       retro_get_system_av_info(&updated_av_info);
       environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &updated_av_info);
    }
+
+   NDSCart_SRAMManager::Flush();
 }
 
 bool retro_load_game(const struct retro_game_info *info)
