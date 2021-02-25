@@ -243,7 +243,20 @@ else ifeq ($(platform), odroidc4)
    HAVE_OPENGLES3 = 1
    HAVE_THREADS = 1
    JIT_ARCH = aarch64
-   
+
+# Odroid Go Advance
+else ifeq ($(platform), odroidgoa)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a35 -mtune=cortex-a35
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
+
 # Odroid N2 / VIM3
 else ifeq ($(platform), odroidn2)
    EXT ?= so
