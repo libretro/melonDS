@@ -23,6 +23,10 @@
 
 #include "GPU2D_Soft.h"
 
+#ifdef _MSC_VER
+#include "MSVC_ctz.h"
+#endif
+
 namespace GPU
 {
 

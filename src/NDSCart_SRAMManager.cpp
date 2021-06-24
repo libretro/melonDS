@@ -18,7 +18,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifndef __LIBRETRO__
 #include <unistd.h>
+#endif
 #include <time.h>
 #include "NDSCart_SRAMManager.h"
 #include "Platform.h"

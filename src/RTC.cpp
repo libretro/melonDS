@@ -130,8 +130,12 @@ void ByteIn(u8 val)
                 {
                     time_t timestamp = time(NULL);
                     struct tm timedata;
+                    #ifdef _MSC_VER
+                    localtime_s(&timedata, &timestamp);
+                    #else
                     localtime_r(&timestamp, &timedata);
-
+                    #endif
+                    
                     Output[0] = BCD(timedata.tm_year - 100);
                     Output[1] = BCD(timedata.tm_mon + 1);
                     Output[2] = BCD(timedata.tm_mday);
@@ -146,7 +150,11 @@ void ByteIn(u8 val)
                 {
                     time_t timestamp = time(NULL);
                     struct tm timedata;
+                    #ifdef _MSC_VER
+                    localtime_s(&timedata, &timestamp);
+                    #else
                     localtime_r(&timestamp, &timedata);
+                    #endif
 
                     Output[0] = BCD(timedata.tm_hour);
                     Output[1] = BCD(timedata.tm_min);
