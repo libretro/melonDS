@@ -24,6 +24,16 @@
 #include "libui_sdl/LAN_Socket.h"
 #endif
 
+#ifndef HAVE_WIFI
+#define SO_REUSEADDR 0
+#define SO_BROADCAST 0
+#define socket(domain, type, protocol) NULL
+#define bind(sockfd, addr, addrlen) -1
+#define setsockopt(sockfd, level, optname, optval, optlen) -1
+#define sendto(sockfd, buf, len, flags, dest_addr, addrlen) 0
+#define recvfrom(sockfd, buf, len, flags, src_addr, addrlen) 0
+#endif
+
 #ifdef HAVE_THREADS
 #include <stdlib.h>
 
@@ -133,27 +143,38 @@ namespace Platform
 
    Mutex* Mutex_Create()
    {
+   #ifdef HAVE_THREADS
       return (Mutex*)slock_new();
+   #endif
+      return NULL;
    }
 
    void Mutex_Free(Mutex* mutex)
    {
+   #ifdef HAVE_THREADS
       slock_free((slock_t*)mutex);
+   #endif
    }
 
    void Mutex_Lock(Mutex* mutex)
    {
+   #ifdef HAVE_THREADS
       slock_lock((slock_t*)mutex);
+   #endif
    }
 
    void Mutex_Unlock(Mutex* mutex)
    {
+   #ifdef HAVE_THREADS
       slock_unlock((slock_t*)mutex);
+   #endif
    }
 
    bool Mutex_TryLock(Mutex* mutex)
    {
+   #ifdef HAVE_THREADS
       slock_try_lock((slock_t*)mutex);
+   #endif
       return true;
    }
 

@@ -1,6 +1,12 @@
 STATIC_LINKING := 0
 AR             := ar
 
+HAVE_NEON      := 0
+HAVE_OPENGL    := 0
+HAVE_OPENGLES3 := 0
+HAVE_THREADS   := 0
+HAVE_WIFI      := 1
+
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
 BACKSLASH :=

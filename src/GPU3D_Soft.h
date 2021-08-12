@@ -20,7 +20,6 @@
 
 #include "GPU3D.h"
 #include "Platform.h"
-#include <thread>
 
 namespace GPU3D
 {
