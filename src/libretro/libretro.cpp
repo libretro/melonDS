@@ -55,7 +55,7 @@ enum CurrentRenderer
 
 static CurrentRenderer current_renderer = CurrentRenderer::None;
 
-bool direct_boot = false;
+bool direct_boot = true;
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
