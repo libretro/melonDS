@@ -624,31 +624,35 @@ bool retro_load_game(const struct retro_game_info *info)
    }
 
    unsigned language = RETRO_LANGUAGE_ENGLISH;
-   environ_cb(RETRO_ENVIRONMENT_GET_LANGUAGE, &language);
-   switch(language)
+   if (environ_cb(RETRO_ENVIRONMENT_GET_LANGUAGE, &language))
    {
-     case RETRO_LANGUAGE_JAPANESE:
-       Config::FirmwareLanguage = 0;
-       break;
+      Config::FirmwareOverrideSettings = true;
+      
+      switch(language)
+      {
+      case RETRO_LANGUAGE_JAPANESE:
+         Config::FirmwareLanguage = 0;
+         break;
 
-     case RETRO_LANGUAGE_FRENCH:
-       Config::FirmwareLanguage = 2;
-       break;
+      case RETRO_LANGUAGE_FRENCH:
+         Config::FirmwareLanguage = 2;
+         break;
 
-     case RETRO_LANGUAGE_GERMAN:
-       Config::FirmwareLanguage = 3;
-       break;
+      case RETRO_LANGUAGE_GERMAN:
+         Config::FirmwareLanguage = 3;
+         break;
 
-     case RETRO_LANGUAGE_ITALIAN:
-       Config::FirmwareLanguage = 4;
-       break;
+      case RETRO_LANGUAGE_ITALIAN:
+         Config::FirmwareLanguage = 4;
+         break;
 
-     case RETRO_LANGUAGE_SPANISH:
-       Config::FirmwareLanguage = 5;
-       break;
+      case RETRO_LANGUAGE_SPANISH:
+         Config::FirmwareLanguage = 5;
+         break;
 
-     default:
-       Config::FirmwareLanguage = 1; // English
+      default:
+         Config::FirmwareLanguage = 1; // English
+      }
    }
 
    check_variables(true);
