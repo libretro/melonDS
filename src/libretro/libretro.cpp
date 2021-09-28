@@ -14,6 +14,7 @@
 #include "GPU.h"
 #include "SPU.h"
 #include "version.h"
+#include "frontend/FrontendUtil.h"
 
 #include "input.h"
 #include "opengl.h"
@@ -55,6 +56,7 @@ enum CurrentRenderer
 
 static CurrentRenderer current_renderer = CurrentRenderer::None;
 
+int console_mode = 0; // 0 = ds, 1 = dsi
 bool direct_boot = true;
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
@@ -155,6 +157,7 @@ void retro_set_environment(retro_environment_t cb)
 
   static const retro_variable values[] =
    {
+      { "melonds_console_mode", "Console Mode; DS|DSi" },
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
       { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only|Hybrid Top|Hybrid Bottom" },
       { "melonds_hybrid_small_screen", "Hybrid small screen mode; Bottom|Top|Duplicate" },
@@ -249,6 +252,15 @@ static void check_variables(bool init)
 #ifdef HAVE_OPENGL
    bool gl_update = false;
 #endif
+
+   var.key = "melonds_console_mode";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "DSi"))
+         console_mode = 1;
+      else
+         console_mode = 0;
+   }
 
    var.key = "melonds_boot_directly";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -650,6 +662,10 @@ bool retro_load_game(const struct retro_game_info *info)
    strcpy(Config::BIOS7Path, "bios7.bin");
    strcpy(Config::BIOS9Path, "bios9.bin");
    strcpy(Config::FirmwarePath, "firmware.bin");
+   strcpy(Config::DSiBIOS7Path, "dsi_bios7.bin");
+   strcpy(Config::DSiBIOS9Path, "dsi_bios9.bin");
+   strcpy(Config::DSiFirmwarePath, "dsi_firmware.bin");
+   strcpy(Config::DSiNANDPath, "dsi_nand.bin");
    strcpy(Config::FirmwareUsername, "MelonDS");
 
    struct retro_input_descriptor desc[] = {
@@ -735,7 +751,9 @@ bool retro_load_game(const struct retro_game_info *info)
    GPU::InitRenderer(false);
    GPU::SetRenderSettings(false, video_settings);
    SPU::SetInterpolation(Config::AudioInterp);
-   NDS::SetConsoleType(0);
+   Config::ConsoleType = console_mode;
+   NDS::SetConsoleType(console_mode);
+   Frontend::LoadBIOS();
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
 
    (void)info;

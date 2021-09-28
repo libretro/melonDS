@@ -31,6 +31,7 @@ endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/AREngine.cpp \
+                    $(MELON_DIR)/ARCodeFile.cpp \
                     $(MELON_DIR)/ARM.cpp \
                     $(MELON_DIR)/ARMInterpreter.cpp \
                     $(MELON_DIR)/ARMInterpreter_ALU.cpp \
@@ -64,6 +65,7 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/SPU.cpp \
                     $(MELON_DIR)/Wifi.cpp \
                     $(MELON_DIR)/WifiAP.cpp \
+                    $(MELON_DIR)/frontend/Util_ROM.cpp \
                     $(CORE_DIR)/config.cpp \
                     $(CORE_DIR)/input.cpp \
                     $(CORE_DIR)/libretro.cpp \

@@ -61,6 +61,8 @@ namespace Config
 
     int AudioBitrate = 0;
     int AudioInterp = 0;
+    int ConsoleType = 0;
+    int DirectBoot = 0;
 
     ConfigEntry ConfigFile[] =
     {

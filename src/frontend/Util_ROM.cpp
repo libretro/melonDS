@@ -726,6 +726,7 @@ bool SavestateExists(int slot)
 
 bool LoadState(const char* filename)
 {
+#ifndef __LIBRETRO__
     u32 oldGBACartCRC = GBACart::CartCRC;
 
     // backup
@@ -789,10 +790,13 @@ bool LoadState(const char* filename)
     }
 
     return !failed;
+#endif
+    return false;
 }
 
 bool SaveState(const char* filename)
 {
+#ifndef __LIBRETRO__
     Savestate* state = new Savestate(filename, true);
     if (state->Error)
     {
@@ -814,12 +818,13 @@ bool SaveState(const char* filename)
             NDS::RelocateSave(SRAMPath[ROMSlot_NDS], true);
         }
     }
-
+#endif
     return true;
 }
 
 void UndoStateLoad()
 {
+#ifndef __LIBRETRO__
     if (!SavestateLoaded) return;
 
     // pray that this works
@@ -834,10 +839,12 @@ void UndoStateLoad()
         strncpy(SRAMPath[ROMSlot_NDS], PrevSRAMPath[ROMSlot_NDS], 1024);
         NDS::RelocateSave(SRAMPath[ROMSlot_NDS], false);
     }
+#endif
 }
 
 int ImportSRAM(const char* filename)
 {
+#ifndef __LIBRETRO__
     FILE* file = fopen(filename, "rb");
     fseek(file, 0, SEEK_END);
     u32 size = ftell(file);
@@ -849,6 +856,8 @@ int ImportSRAM(const char* filename)
     int diff = NDS::ImportSRAM(importData, size);
     delete[] importData;
     return diff;
+#endif
+    return 0;
 }
 
 void EnableCheats(bool enable)

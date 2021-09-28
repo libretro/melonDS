@@ -89,6 +89,7 @@ u64 FrameStartTimestamp;
 int CurCPU;
 
 const s32 kMaxIterationCycles = 64;
+const s32 kIterationCycleMargin = 8;
 
 u32 ARM9ClockShift;
 
@@ -914,7 +915,7 @@ void RelocateSave(const char* path, bool write)
 
 u64 NextTarget()
 {
-    u64 ret = SysTimestamp + kMaxIterationCycles;
+    u64 minEvent = UINT64_MAX;
 
     u32 mask = SchedListMask;
     for (int i = 0; i < Event_MAX; i++)
@@ -922,14 +923,19 @@ u64 NextTarget()
         if (!mask) break;
         if (mask & 0x1)
         {
-            if (SchedList[i].Timestamp < ret)
-                ret = SchedList[i].Timestamp;
+            if (SchedList[i].Timestamp < minEvent)
+                minEvent = SchedList[i].Timestamp;
         }
 
         mask >>= 1;
     }
 
-    return ret;
+    u64 max = SysTimestamp + kMaxIterationCycles;
+
+    if (minEvent < max + kIterationCycleMargin)
+        return minEvent;
+
+    return max;
 }
 
 void RunSystem(u64 timestamp)
@@ -966,7 +972,6 @@ u32 RunFrame()
 
         while (Running && GPU::TotalScanlines==0)
         {
-            // TODO: give it some margin, so it can directly do 17 cycles instead of 16 then 1
             u64 target = NextTarget();
             ARM9Target = target << ARM9ClockShift;
             CurCPU = 0;
