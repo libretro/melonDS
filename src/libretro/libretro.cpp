@@ -56,8 +56,6 @@ enum CurrentRenderer
 
 static CurrentRenderer current_renderer = CurrentRenderer::None;
 
-bool direct_boot = true;
-
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
    (void)level;
@@ -242,7 +240,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 void retro_reset(void)
 {
    NDS::Reset();
-   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
+   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), Config::DirectBoot);
 }
 
 static void check_variables(bool init)
@@ -266,9 +264,9 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "disabled"))
-         direct_boot = false;
+         Config::DirectBoot = 0;
       else
-         direct_boot = true;
+         Config::DirectBoot = 1;
    }
 
    ScreenLayout layout = ScreenLayout::TopBottom;
@@ -763,7 +761,7 @@ bool retro_load_game(const struct retro_game_info *info)
    SPU::SetInterpolation(Config::AudioInterp);
    NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
-   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
+   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), Config::DirectBoot);
 
    (void)info;
 
