@@ -787,35 +787,60 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info *info, 
 
 size_t retro_serialize_size(void)
 {
-   // Create the dummy savestate
-   void* data = malloc(MAX_SERIALIZE_TEST_SIZE);
-   Savestate* savestate = new Savestate(data, MAX_SERIALIZE_TEST_SIZE, true);
-   NDS::DoSavestate(savestate);
-   // Find the offset to find the current static filesize
-   size_t size = savestate->GetOffset();
-   // Free
-   delete savestate;
-   free(data);
+   if (NDS::ConsoleType == 0)
+   {
+      // Create the dummy savestate
+      void* data = malloc(MAX_SERIALIZE_TEST_SIZE);
+      Savestate* savestate = new Savestate(data, MAX_SERIALIZE_TEST_SIZE, true);
+      NDS::DoSavestate(savestate);
+      // Find the offset to find the current static filesize
+      size_t size = savestate->GetOffset();
+      // Free
+      delete savestate;
+      free(data);
 
-   return size;
+      return size;
+   }
+   else
+   {
+      log_cb(RETRO_LOG_WARN, "Savestates unsupported in DSi mode.\n");
+      return 0;
+   }
+
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-   Savestate* savestate = new Savestate(data, size, true);
-   NDS::DoSavestate(savestate);
-   delete savestate;
+   if (NDS::ConsoleType == 0)
+   {
+      Savestate* savestate = new Savestate(data, size, true);
+      NDS::DoSavestate(savestate);
+      delete savestate;
 
-   return true;
+      return true;
+   }
+   else
+   {
+      log_cb(RETRO_LOG_WARN, "Savestates unsupported in DSi mode.\n");
+      return false;
+   }
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
-   Savestate* savestate = new Savestate((void*)data, size, false);
-   NDS::DoSavestate(savestate);
-   delete savestate;
+   if (NDS::ConsoleType == 0)
+   {
+      Savestate* savestate = new Savestate((void*)data, size, false);
+      NDS::DoSavestate(savestate);
+      delete savestate;
 
-   return true;
+      return true;
+   }
+   else
+   {
+      log_cb(RETRO_LOG_WARN, "Savestates unsupported in DSi mode.\n");
+      return false;
+   }
 }
 
 void *retro_get_memory_data(unsigned type)
