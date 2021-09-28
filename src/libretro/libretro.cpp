@@ -56,7 +56,6 @@ enum CurrentRenderer
 
 static CurrentRenderer current_renderer = CurrentRenderer::None;
 
-int console_mode = 0; // 0 = ds, 1 = dsi
 bool direct_boot = true;
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
@@ -258,9 +257,9 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "DSi"))
-         console_mode = 1;
+         Config::ConsoleType = 1;
       else
-         console_mode = 0;
+         Config::ConsoleType = 0;
    }
 
    var.key = "melonds_boot_directly";
@@ -762,8 +761,7 @@ bool retro_load_game(const struct retro_game_info *info)
    GPU::InitRenderer(false);
    GPU::SetRenderSettings(false, video_settings);
    SPU::SetInterpolation(Config::AudioInterp);
-   Config::ConsoleType = console_mode;
-   NDS::SetConsoleType(console_mode);
+   NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
 
