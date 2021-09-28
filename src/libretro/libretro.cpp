@@ -180,6 +180,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_jit_literal_optimisations", "JIT Literal optimisations; enabled|disabled" },
       { "melonds_jit_fast_memory", "JIT Fast memory; enabled|disabled" },
 #endif
+      { "melonds_dsi_sdcard", "Enable DSi SD card; disabled|enabled" },
       { "melonds_audio_bitrate", "Audio bitrate; Automatic|10-bit|16-bit" },
       { "melonds_audio_interpolation", "Audio Interpolation; None|Linear|Cosine|Cubic" },
       { 0, 0 }
@@ -454,6 +455,15 @@ static void check_variables(bool init)
    }
 #endif
 
+   var.key = "melonds_dsi_sdcard";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         Config::DSiSDEnable = 1;
+      else
+         Config::DSiSDEnable = 0;
+   }
+
    var.key = "melonds_audio_bitrate";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -666,6 +676,7 @@ bool retro_load_game(const struct retro_game_info *info)
    strcpy(Config::DSiBIOS9Path, "dsi_bios9.bin");
    strcpy(Config::DSiFirmwarePath, "dsi_firmware.bin");
    strcpy(Config::DSiNANDPath, "dsi_nand.bin");
+   strcpy(Config::DSiSDPath, "dsi_sd_card.bin");
    strcpy(Config::FirmwareUsername, "MelonDS");
 
    struct retro_input_descriptor desc[] = {
