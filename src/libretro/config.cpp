@@ -60,6 +60,7 @@ namespace Config
 #endif
 
     int AudioBitrate = 0;
+    int AudioInterp = 0;
 
     ConfigEntry ConfigFile[] =
     {

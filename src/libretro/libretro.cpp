@@ -176,8 +176,9 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_jit_branch_optimisations", "JIT Branch optimisations; enabled|disabled" },
       { "melonds_jit_literal_optimisations", "JIT Literal optimisations; enabled|disabled" },
       { "melonds_jit_fast_memory", "JIT Fast memory; enabled|disabled" },
-      { "melonds_audio_bitrate", "Audio bitrate; Automatic|10-bit|16-bit" },
 #endif
+      { "melonds_audio_bitrate", "Audio bitrate; Automatic|10-bit|16-bit" },
+      { "melonds_audio_interpolation", "Audio Interpolation; None|Linear|Cosine|Cubic" },
       { 0, 0 }
    };
 
@@ -452,6 +453,19 @@ static void check_variables(bool init)
          Config::AudioBitrate = 0;
    }
 
+   var.key = "melonds_audio_interpolation";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "Cubic"))
+         Config::AudioInterp = 3;
+      else if (!strcmp(var.value, "Cosine"))
+         Config::AudioInterp = 2;
+      else if (!strcmp(var.value, "Linear"))
+         Config::AudioInterp = 1;
+      else
+         Config::AudioInterp = 0;
+   }
+
    input_state.current_touch_mode = new_touch_mode;
 
    update_screenlayout(layout, &screen_layout_data, enable_opengl, swapped_screens);
@@ -720,6 +734,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
    GPU::InitRenderer(false);
    GPU::SetRenderSettings(false, video_settings);
+   SPU::SetInterpolation(Config::AudioInterp);
    NDS::SetConsoleType(0);
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);
 
