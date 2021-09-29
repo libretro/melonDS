@@ -114,6 +114,18 @@ void retro_set_environment(retro_environment_t cb)
    struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
 
+   std::string screen_gap = "Screen gap; ";
+
+   static const int MAX_SCREEN_GAP = 192; // arbitrarily choose screen Y res
+
+   for (int i = 0; i <= MAX_SCREEN_GAP; i++)
+   {
+       screen_gap.append(std::to_string(i));
+
+       if (i != MAX_SCREEN_GAP)
+           screen_gap.append("|");
+   }
+
 #ifdef HAVE_OPENGL
    std::string opengl_resolution = "OpenGL Internal Resolution; ";
 
@@ -157,6 +169,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_console_mode", "Console Mode; DS|DSi" },
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
       { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only|Hybrid Top|Hybrid Bottom" },
+      { "melonds_screen_gap", screen_gap.c_str() },
       { "melonds_hybrid_small_screen", "Hybrid small screen mode; Bottom|Top|Duplicate" },
       { "melonds_swapscreen_mode", "Swap Screen mode; Toggle|Hold" },
 #ifdef HAVE_THREADS
@@ -289,6 +302,12 @@ static void check_variables(bool init)
          layout = ScreenLayout::HybridTop;
       else if (!strcmp(var.value, "Hybrid Bottom"))
          layout = ScreenLayout::HybridBottom;
+   }
+
+   var.key = "melonds_screen_gap";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+        screen_layout_data.screen_gap = std::stoi(var.value);
    }
 
 #ifdef HAVE_OPENGL
