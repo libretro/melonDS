@@ -37,6 +37,7 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
 
     data->screen_width = VIDEO_WIDTH * scale;
     data->screen_height = VIDEO_HEIGHT * scale;
+    data->screen_gap = data->screen_gap_unscaled * scale;
 
     current_screen_layout = layout;
 

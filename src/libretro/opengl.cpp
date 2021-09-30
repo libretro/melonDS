@@ -177,6 +177,7 @@ void setup_opengl_frame_state(void)
 
    float screen_width = (float)screen_layout_data.screen_width;
    float screen_height = (float)screen_layout_data.screen_height;
+   float screen_gap = (float)screen_layout_data.screen_gap;
 
    float top_screen_x = 0.0f;
    float top_screen_y = 0.0f;
@@ -206,10 +207,10 @@ void setup_opengl_frame_state(void)
    switch (screen_layout_data.displayed_layout)
    {
       case ScreenLayout::TopBottom:
-         bottom_screen_y = screen_height;
+         bottom_screen_y = screen_height + screen_gap;
          break;
       case ScreenLayout::BottomTop:
-         top_screen_y = screen_height;
+         top_screen_y = screen_height + screen_gap;
          break;
       case ScreenLayout::LeftRight:
          bottom_screen_x = screen_width;

@@ -54,6 +54,7 @@ struct ScreenLayoutData
     unsigned touch_offset_x;
     unsigned touch_offset_y;
 
+    unsigned screen_gap_unscaled;
     unsigned screen_gap;
 
     bool hybrid;

@@ -307,7 +307,7 @@ static void check_variables(bool init)
    var.key = "melonds_screen_gap";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
-        screen_layout_data.screen_gap = std::stoi(var.value);
+        screen_layout_data.screen_gap_unscaled = std::stoi(var.value);
    }
 
 #ifdef HAVE_OPENGL
