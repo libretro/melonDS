@@ -2,6 +2,43 @@
 
 #include <cstdint>
 
+#ifdef HAVE_THREADS
+#include <atomic>
+#else
+namespace std
+{
+    class mutex {};
+    class recursive_mutex {};
+
+    template<typename _Mutex>
+    class lock_guard
+    {
+    public:
+        lock_guard(_Mutex& _) { }
+    };
+
+    template <typename _Tp>
+    struct atomic
+    {
+    public:
+        atomic() {}
+        atomic(_Tp new_value) { this->value = new_value; }
+
+        _Tp exchange(_Tp new_value) 
+        {
+            _Tp old_value = this->value;
+            this->value = new_value; 
+            return old_value;
+        }
+
+        operator bool() { return this->value; }
+
+    private:
+        _Tp value;
+    };
+}
+#endif
+
 using u8 = std::uint8_t;
 using u16 = std::uint16_t;
 using u32 = std::uint32_t;

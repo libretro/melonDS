@@ -20,8 +20,11 @@
 
 #include "GPU3D.h"
 #include "Platform.h"
+
+#ifdef HAVE_THREADS
 #include <thread>
 #include <atomic>
+#endif
 
 namespace GPU3D
 {
@@ -507,8 +510,15 @@ private:
 
     bool Threaded;
     Platform::Thread* RenderThread;
+
+#ifdef HAVE_THREADS
     std::atomic_bool RenderThreadRunning;
     std::atomic_bool RenderThreadRendering;
+#else
+    bool RenderThreadRunning;
+    bool RenderThreadRendering;
+#endif
+
     Platform::Semaphore* Sema_RenderStart;
     Platform::Semaphore* Sema_RenderDone;
     Platform::Semaphore* Sema_ScanlineCount;

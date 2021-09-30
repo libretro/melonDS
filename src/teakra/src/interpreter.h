@@ -1,5 +1,4 @@
 #pragma once
-#include <atomic>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>

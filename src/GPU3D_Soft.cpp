@@ -34,6 +34,7 @@ void RenderThreadFunc();
 
 void SoftRenderer::StopRenderThread()
 {
+#ifdef HAVE_THREADS
     if (RenderThreadRunning.load(std::memory_order_relaxed))
     {
         RenderThreadRunning = false;
@@ -41,12 +42,14 @@ void SoftRenderer::StopRenderThread()
         Platform::Thread_Wait(RenderThread);
         Platform::Thread_Free(RenderThread);
     }
+#endif
 }
 
 void SoftRenderer::SetupRenderThread()
 {
     if (Threaded)
     {
+#ifdef HAVE_THREADS
         if (!RenderThreadRunning.load(std::memory_order_relaxed))
         {
             RenderThreadRunning = true;
@@ -64,6 +67,7 @@ void SoftRenderer::SetupRenderThread()
         Platform::Semaphore_Reset(Sema_ScanlineCount);
 
         Platform::Semaphore_Post(Sema_RenderStart);
+#endif
     }
     else
     {
@@ -1645,8 +1649,10 @@ void SoftRenderer::RenderPolygons(bool threaded, Polygon** polygons, int npolys)
 
 void SoftRenderer::VCount144()
 {
+#ifdef HAVE_THREADS
     if (RenderThreadRunning.load(std::memory_order_relaxed) && !GPU3D::AbortFrame)
         Platform::Semaphore_Wait(Sema_RenderDone);
+#endif
 }
 
 void SoftRenderer::RenderFrame()
@@ -1659,11 +1665,14 @@ void SoftRenderer::RenderFrame()
 
     FrameIdentical = !(textureChanged || texPalChanged) && RenderFrameIdentical;
 
+#ifdef HAVE_THREADS
     if (RenderThreadRunning.load(std::memory_order_relaxed))
     {
         Platform::Semaphore_Post(Sema_RenderStart);
     }
-    else if (!FrameIdentical)
+    else 
+#endif
+    if (!FrameIdentical)
     {
         ClearBuffers();
         RenderPolygons(false, &RenderPolygonRAM[0], RenderNumPolygons);
@@ -1700,11 +1709,13 @@ void SoftRenderer::RenderThreadFunc()
 
 u32* SoftRenderer::GetLine(int line)
 {
+#ifdef HAVE_THREADS
     if (RenderThreadRunning.load(std::memory_order_relaxed))
     {
         if (line < 192)
             Platform::Semaphore_Wait(Sema_ScanlineCount);
     }
+#endif
 
     return &ColorBuffer[(line * ScanlineWidth) + FirstPixelOffset];
 }

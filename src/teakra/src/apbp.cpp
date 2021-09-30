@@ -1,5 +1,4 @@
 #include <array>
-#include <atomic>
 #include <mutex>
 #include <utility>
 #include "apbp.h"
