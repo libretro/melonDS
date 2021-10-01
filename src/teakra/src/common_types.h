@@ -4,6 +4,7 @@
 
 #ifdef HAVE_THREADS
 #include <atomic>
+#include <mutex>
 #else
 namespace std
 {
