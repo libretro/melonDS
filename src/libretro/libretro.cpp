@@ -95,7 +95,7 @@ void retro_get_system_info(struct retro_system_info *info)
 #endif
    info->library_version  = MELONDS_VERSION GIT_VERSION;
    info->need_fullpath    = true;
-   info->valid_extensions = "nds";
+   info->valid_extensions = "nds|dsi";
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
