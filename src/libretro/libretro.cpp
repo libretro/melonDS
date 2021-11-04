@@ -172,6 +172,7 @@ void retro_set_environment(retro_environment_t cb)
       { "melonds_screen_gap", screen_gap.c_str() },
       { "melonds_hybrid_small_screen", "Hybrid small screen mode; Bottom|Top|Duplicate" },
       { "melonds_swapscreen_mode", "Swap Screen mode; Toggle|Hold" },
+      { "melonds_randomize_mac_address", "Randomize MAC address; disabled|enabled" },
 #ifdef HAVE_THREADS
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
 #endif
@@ -342,6 +343,15 @@ static void check_variables(bool init)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value != NULL)
    {
       toggle_swap_screen = !strcmp(var.value, "Toggle");
+   }
+
+   var.key = "melonds_randomize_mac_address";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         Config::RandomizeMAC = 1;
+      else
+         Config::RandomizeMAC = 0;
    }
 
 #ifdef HAVE_THREADS
