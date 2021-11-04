@@ -729,6 +729,7 @@ bool retro_load_game(const struct retro_game_info *info)
    unsigned language = RETRO_LANGUAGE_ENGLISH;
    if (environ_cb(RETRO_ENVIRONMENT_GET_LANGUAGE, &language))
    {
+      Config::RandomizeMAC = true;
       Config::FirmwareOverrideSettings = true;
       
       switch(language)
