@@ -94,7 +94,7 @@ void retro_get_system_info(struct retro_system_info *info)
 #define GIT_VERSION ""
 #endif
    info->library_version  = MELONDS_VERSION GIT_VERSION;
-   info->need_fullpath    = true;
+   info->need_fullpath    = false;
    info->valid_extensions = "nds|dsi";
 }
 
@@ -782,7 +782,6 @@ bool retro_load_game(const struct retro_game_info *info)
    char game_name[256];
    fill_pathname_base_noext(game_name, info->path, sizeof(game_name));
 
-   rom_path = std::string(info->path);
    save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(game_name) + ".sav";
 
    GPU::InitRenderer(false);
@@ -790,7 +789,7 @@ bool retro_load_game(const struct retro_game_info *info)
    SPU::SetInterpolation(Config::AudioInterp);
    NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
-   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), Config::DirectBoot);
+   NDS::LoadROM((u8*)info->data, info->size, save_path.c_str(), Config::DirectBoot);
 
    (void)info;
 
