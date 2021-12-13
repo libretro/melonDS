@@ -33,8 +33,9 @@ retro_input_state_t input_state_cb;
 retro_log_printf_t log_cb;
 retro_video_refresh_t video_cb;
 
-std::string rom_path;
 std::string save_path;
+
+retro_game_info* cached_info;
 
 GPU::RenderSettings video_settings;
 
@@ -254,7 +255,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 void retro_reset(void)
 {
    NDS::Reset();
-   NDS::LoadROM(rom_path.c_str(), save_path.c_str(), Config::DirectBoot);
+   NDS::LoadROM((u8*)cached_info->data, cached_info->size, save_path.c_str(), Config::DirectBoot);
 }
 
 static void check_variables(bool init)
@@ -664,6 +665,14 @@ void retro_run(void)
 
 bool retro_load_game(const struct retro_game_info *info)
 {
+   /*
+   * FIXME: Less bad than copying the whole data pointer, but still not great.
+   * NDS::Reset() calls wipes the cart buffer so on invoke we need a reload from info->data.
+   * Since retro_reset callback doesn't pass the info struct we need to cache it
+   * here.
+   */
+   cached_info = const_cast<retro_game_info*>(info);
+
    std::vector <std::string> required_roms = {"bios7.bin", "bios9.bin", "firmware.bin"};
    std::vector <std::string> missing_roms;
 
