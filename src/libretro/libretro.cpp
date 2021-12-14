@@ -47,6 +47,7 @@ bool swapped_screens = false;
 bool toggle_swap_screen = false;
 bool swap_screen_toggled = false;
 
+const int SLOT_1_2_BOOT = 1;
 
 enum CurrentRenderer
 {
@@ -216,6 +217,27 @@ void retro_set_environment(retro_environment_t cb)
    };
 
    cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
+
+   static const struct retro_subsystem_memory_info gba_memory[] = {
+      { "srm", 0x101 },
+	};
+
+   static const struct retro_subsystem_memory_info nds_memory[] = {
+      { "sav", 0x102 },
+	};
+
+   static const struct retro_subsystem_rom_info slot_1_2_roms[] {
+      { "NDS Rom (Slot 1)", "nds", false, false, true, nds_memory, 0 },
+      { "GBA Rom (Slot 2)", "gba", false, false, true, gba_memory, 1 },
+      {}
+   };
+
+   static const struct retro_subsystem_info subsystems[] = {
+		{ "Slot 1/2 Boot", "gba", slot_1_2_roms, 2, SLOT_1_2_BOOT },
+      {}
+	};
+
+   cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystems);
 
    vfs_iface_info.required_interface_version = FILESTREAM_REQUIRED_VFS_VERSION;
    vfs_iface_info.iface = NULL;
@@ -663,7 +685,7 @@ void retro_run(void)
    NDSCart_SRAMManager::Flush();
 }
 
-bool retro_load_game(const struct retro_game_info *info)
+bool _handle_load_game(unsigned type, const struct retro_game_info *info, size_t num)
 {
    /*
    * FIXME: Less bad than copying the whole data pointer, but still not great.
@@ -799,10 +821,26 @@ bool retro_load_game(const struct retro_game_info *info)
    NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
    NDS::LoadROM((u8*)info->data, info->size, save_path.c_str(), Config::DirectBoot);
+   
+   if(type == SLOT_1_2_BOOT)
+   {
+      char gba_game_name[256];
+      std::string gba_save_path;
+
+      fill_pathname_base_noext(gba_game_name, info[1].path, sizeof(gba_game_name));
+      gba_save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(gba_game_name) + ".srm";
+
+      NDS::LoadGBAROM((u8*)info[1].data, info[1].size, gba_game_name, gba_save_path.c_str());
+   }
 
    (void)info;
 
    return true;
+}
+
+bool retro_load_game(const struct retro_game_info *info)
+{
+   return _handle_load_game(NULL, info, NULL);
 }
 
 void retro_unload_game(void)
@@ -817,7 +855,7 @@ unsigned retro_get_region(void)
 
 bool retro_load_game_special(unsigned type, const struct retro_game_info *info, size_t num)
 {
-   return false;
+   return _handle_load_game(type, info, num);
 }
 
 #define MAX_SERIALIZE_TEST_SIZE 16 * 1024 * 1024 // The current savestate is around 7MiB so 16MiB should be enough for now
