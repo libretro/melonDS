@@ -116,6 +116,17 @@ void retro_set_environment(retro_environment_t cb)
    struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
 
+   static const struct retro_system_content_info_override content_overrides[] = {
+      {
+         "nds|dsi|gba",
+         false,
+         true
+      },
+      { NULL, false, false}
+   };
+
+   environ_cb(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, (void*)content_overrides);
+
    std::string screen_gap = "Screen gap; ";
 
    static const int MAX_SCREEN_GAP = 192; // arbitrarily choose screen Y res
