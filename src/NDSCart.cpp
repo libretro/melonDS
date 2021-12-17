@@ -1409,14 +1409,26 @@ bool Init()
 
 void DeInit()
 {
+/*
+* Libretro now guarantees an persistant rom buffer provided by the frontend.
+* CartROM cleanup doesnt need to be handled here.
+*/
+#ifndef __LIBRETRO__    
     if (CartROM) delete[] CartROM;
+#endif    
     if (Cart) delete Cart;
 }
 
 void Reset()
 {
     CartInserted = false;
+/*
+* Libretro now guarantees an persistant rom buffer provided by the frontend.
+* CartROM cleanup doesnt need to be handled here.
+*/
+#ifndef __LIBRETRO__    
     if (CartROM) delete[] CartROM;
+#endif   
     CartROM = nullptr;
     CartROMSize = 0;
     CartID = 0;
@@ -1703,9 +1715,7 @@ bool LoadROM(const u8* romdata, u32 filelength, const char *sram, bool direct)
     while (CartROMSize < len)
         CartROMSize <<= 1;
 
-    CartROM = new u8[CartROMSize];
-    memset(CartROM, 0, CartROMSize);
-    memcpy(CartROM, romdata, filelength);
+    CartROM = const_cast<u8*>(romdata);
 
     return LoadROMCommon(filelength, sram, direct);
 }
