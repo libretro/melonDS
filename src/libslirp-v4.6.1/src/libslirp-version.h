@@ -6,10 +6,10 @@
 extern "C" {
 #endif
 
-#define SLIRP_MAJOR_VERSION @SLIRP_MAJOR_VERSION@
-#define SLIRP_MINOR_VERSION @SLIRP_MINOR_VERSION@
-#define SLIRP_MICRO_VERSION @SLIRP_MICRO_VERSION@
-#define SLIRP_VERSION_STRING @SLIRP_VERSION_STRING@
+#define SLIRP_MAJOR_VERSION 4
+#define SLIRP_MINOR_VERSION 6
+#define SLIRP_MICRO_VERSION 1
+#define SLIRP_VERSION_STRING "4.6.1"
 
 #define SLIRP_CHECK_VERSION(major,minor,micro)                          \
     (SLIRP_MAJOR_VERSION > (major) ||                                   \

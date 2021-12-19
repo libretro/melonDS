@@ -81,7 +81,11 @@ int get_dns_addr(struct in_addr *pdns_addr)
 
     FixedInfo = (FIXED_INFO *)GlobalAlloc(GPTR, sizeof(FIXED_INFO));
     BufLen = sizeof(FIXED_INFO);
-
+/*
+* GetNetworkParams fails to link. Unclear where defined.
+* Currently works with block disabled but fix before attempting final commit.
+*/
+#if 0
     if (ERROR_BUFFER_OVERFLOW == GetNetworkParams(FixedInfo, &BufLen)) {
         if (FixedInfo) {
             GlobalFree(FixedInfo);
@@ -98,6 +102,7 @@ int get_dns_addr(struct in_addr *pdns_addr)
         }
         return -1;
     }
+#endif
 
     pIPAddr = &(FixedInfo->DnsServerList);
     inet_aton(pIPAddr->IpAddress.String, &tmp_addr);
