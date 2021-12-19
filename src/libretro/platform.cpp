@@ -23,9 +23,8 @@
 #include <sys/select.h>
 #endif
 
-#ifdef HAVE_PCAP
-#include "libui_sdl/LAN_PCap.h"
-#include "libui_sdl/LAN_Socket.h"
+#ifdef HAVE_SLIRP
+#include "frontend/qt_sdl/LAN_Socket.h"
 #endif
 
 #ifdef HAVE_LIBNX
@@ -360,59 +359,32 @@ namespace Platform
 
    bool LAN_Init()
    {
-#ifdef HAVE_PCAP
-    if (Config::DirectLAN)
-    {
-        if (!LAN_PCap::Init(true))
-            return false;
-    }
-    else
-    {
-        if (!LAN_Socket::Init())
-            return false;
-    }
-
-    return true;
-#else
-   return false;
+#ifdef HAVE_SLIRP
+      return LAN_Socket::Init();
 #endif
    }
 
    void LAN_DeInit()
    {
-      // checkme. blarg
-      //if (Config::DirectLAN)
-      //    LAN_PCap::DeInit();
-      //else
-      //    LAN_Socket::DeInit();
-#ifdef HAVE_PCAP
-      LAN_PCap::DeInit();
+#ifdef HAVE_SLIRP
       LAN_Socket::DeInit();
 #endif
    }
 
    int LAN_SendPacket(u8* data, int len)
    {
-#ifdef HAVE_PCAP
-      if (Config::DirectLAN)
-         return LAN_PCap::SendPacket(data, len);
-      else
-         return LAN_Socket::SendPacket(data, len);
-#else
-      return 0;
+#ifdef HAVE_SLIRP
+      return LAN_Socket::SendPacket(data, len);
 #endif
+      return 0;
    }
 
    int LAN_RecvPacket(u8* data)
    {
-#ifdef HAVE_PCAP
-      if (Config::DirectLAN)
-         return LAN_PCap::RecvPacket(data);
-      else
-         return LAN_Socket::RecvPacket(data);
-#else
-      return 0;
+#ifdef HAVE_SLIRP
+      return LAN_Socket::RecvPacket(data);
 #endif
+      return 0;
    }
 
 #ifdef HAVE_OPENGL

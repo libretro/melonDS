@@ -6,6 +6,7 @@ HAVE_OPENGL    := 0
 HAVE_OPENGLES3 := 0
 HAVE_THREADS   := 0
 HAVE_WIFI      := 1
+HAVE_SLIRP     := 0
 
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
@@ -448,9 +449,10 @@ else
    CC ?= gcc
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LDFLAGS += -lws2_32 -lwinmm -lopengl32
+   LDFLAGS += -lws2_32 -lwinmm -lopengl32 -lslirp
    HAVE_OPENGL=1
    HAVE_THREADS=1
+   HAVE_SLIRP=1
 
    ifeq ($(MSYSTEM),MINGW64)
       CC ?= x86_64-w64-mingw32-gcc
