@@ -103,7 +103,40 @@ SOURCES_CXX +=  $(MELON_DIR)/GPU_OpenGL.cpp \
 DEFINES += -DHAVE_OPENGL -DOGLRENDERER_ENABLED -DCORE
 endif
 
+# libslirp + Terrible hardcoded path hack load glib-2.0 headers for compiling libslirp, fix before attempting merge.
 ifeq ($(HAVE_SLIRP), 1)
+SOURCES_C += $(MELON_DIR)/libslirp-v4.6.1/src/arp_table.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/bootp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/cksum.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/dhcpv6.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/dnssearch.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/if.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip6_icmp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip6_input.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip6_output.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip_icmp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip_input.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ip_output.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/mbuf.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/misc.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ncsi.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/ndp_table.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/sbuf.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/slirp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/socket.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/state.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/stream.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/tcp_input.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/tcp_output.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/tcp_subr.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/tcp_timer.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/tftp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/udp.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/udp6.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/util.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/version.c \
+                $(MELON_DIR)/libslirp-v4.6.1/src/vmstate.c
+INCFLAGS += -I$(MELON_DIR)/libslirp-v4.6.1/src -IC:/msys64/mingw64/include/glib-2.0 -IC:/msys64/mingw64/lib/glib-2.0/include -mms-bitfields -IC:/msys64/mingw64/include
 DEFINES += -DHAVE_SLIRP
 endif
 

@@ -449,7 +449,7 @@ else
    CC ?= gcc
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LDFLAGS += -lws2_32 -lwinmm -lopengl32 -lslirp
+   LDFLAGS += -lws2_32 -lwinmm -lopengl32 -lglib-2.0
    HAVE_OPENGL=1
    HAVE_THREADS=1
    HAVE_SLIRP=1
