@@ -66,7 +66,6 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/Wifi.cpp \
                     $(MELON_DIR)/WifiAP.cpp \
                     $(MELON_DIR)/frontend/Util_ROM.cpp \
-                    $(MELON_DIR)/frontend/qt_sdl/LAN_Socket.cpp \
                     $(CORE_DIR)/config.cpp \
                     $(CORE_DIR)/input.cpp \
                     $(CORE_DIR)/libretro.cpp \
@@ -103,8 +102,10 @@ SOURCES_CXX +=  $(MELON_DIR)/GPU_OpenGL.cpp \
 DEFINES += -DHAVE_OPENGL -DOGLRENDERER_ENABLED -DCORE
 endif
 
-# libslirp + Terrible hardcoded path hack load glib-2.0 headers for compiling libslirp, fix before attempting merge.
 ifeq ($(HAVE_SLIRP), 1)
+SOURCES_CXX += $(MELON_DIR)/frontend/qt_sdl/LAN_Socket.cpp \
+
+# libslirp
 SOURCES_C += $(MELON_DIR)/libslirp-v4.6.1/src/arp_table.c \
                 $(MELON_DIR)/libslirp-v4.6.1/src/bootp.c \
                 $(MELON_DIR)/libslirp-v4.6.1/src/cksum.c \
@@ -136,7 +137,7 @@ SOURCES_C += $(MELON_DIR)/libslirp-v4.6.1/src/arp_table.c \
                 $(MELON_DIR)/libslirp-v4.6.1/src/util.c \
                 $(MELON_DIR)/libslirp-v4.6.1/src/version.c \
                 $(MELON_DIR)/libslirp-v4.6.1/src/vmstate.c
-INCFLAGS += -I$(MELON_DIR)/libslirp-v4.6.1/src -IC:/msys64/mingw64/include/glib-2.0 -IC:/msys64/mingw64/lib/glib-2.0/include -mms-bitfields -IC:/msys64/mingw64/include
+INCFLAGS += -I$(MELON_DIR)/libslirp-v4.6.1/src `pkg-config --cflags glib-2.0`
 DEFINES += -DHAVE_SLIRP
 endif
 
