@@ -236,38 +236,25 @@ void Reset()
 
     *(u16*)&Firmware[userdata+0x72] = CRC16(&Firmware[userdata], 0x70, 0xFFFF);
 
+    if (!f && Config::FirmwareOverrideSettings)
+        LoadUserSettingsFromConfig();
+
+    // setting language
+    Firmware[UserSettings+0x64] = Config::FirmwareLanguage;
+
+    *(u16*)&Firmware[userdata+0x72] = CRC16(&Firmware[userdata], 0x70, 0xFFFF);
+
     if (Config::RandomizeMAC)
     {
-        if (!f || Config::FirmwareOverrideSettings)
-            LoadUserSettingsFromConfig();
+        // replace MAC address with random address
+        Firmware[0x36] = 0x00;
+        Firmware[0x37] = 0x09;
+        Firmware[0x38] = 0xBF;
+        Firmware[0x39] = rand()&0xFF;
+        Firmware[0x3A] = rand()&0xFF;
+        Firmware[0x3B] = rand()&0xFF;
 
-        // fix touchscreen coords
-        *(u16*)&Firmware[userdata+0x58] = 0;
-        *(u16*)&Firmware[userdata+0x5A] = 0;
-        Firmware[userdata+0x5C] = 0;
-        Firmware[userdata+0x5D] = 0;
-        *(u16*)&Firmware[userdata+0x5E] = 255<<4;
-        *(u16*)&Firmware[userdata+0x60] = 191<<4;
-        Firmware[userdata+0x62] = 255;
-        Firmware[userdata+0x63] = 191;
-
-        // disable autoboot
-        //Firmware[userdata+0x64] &= 0xBF;
-
-        *(u16*)&Firmware[userdata+0x72] = CRC16(&Firmware[userdata], 0x70, 0xFFFF);
-
-        if (Config::RandomizeMAC)
-        {
-            // replace MAC address with random address
-            Firmware[0x36] = 0x00;
-            Firmware[0x37] = 0x09;
-            Firmware[0x38] = 0xBF;
-            Firmware[0x39] = rand()&0xFF;
-            Firmware[0x3A] = rand()&0xFF;
-            Firmware[0x3B] = rand()&0xFF;
-
-            *(u16*)&Firmware[0x2A] = CRC16(&Firmware[0x2C], *(u16*)&Firmware[0x2C], 0x0000);
-        }
+        *(u16*)&Firmware[0x2A] = CRC16(&Firmware[0x2C], *(u16*)&Firmware[0x2C], 0x0000);
     }
 
     printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
