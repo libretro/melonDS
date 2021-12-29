@@ -623,13 +623,8 @@ bool Init()
 
 void DeInit()
 {
-/*
-* Libretro now guarantees an persistant rom buffer provided by the frontend.
-* CartROM cleanup doesnt need to be handled here.
-*/
-#ifndef __LIBRETRO__    
     if (CartROM) delete[] CartROM;
-#endif
+
     if (Cart) delete Cart;
 }
 
@@ -785,7 +780,8 @@ bool LoadROM(const u8* romdata, u32 filelength, const char *sram)
     while (CartROMSize < filelength)
         CartROMSize <<= 1;
 
-    CartROM = const_cast<u8*>(romdata);
+    CartROM = new u8[CartROMSize];
+    memcpy(CartROM, romdata, filelength);
 
     LoadROMCommon(sram);
 
