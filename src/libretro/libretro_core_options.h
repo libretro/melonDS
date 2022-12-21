@@ -13,9 +13,10 @@
 
 /*
  ********************************
- * VERSION: 2.0
+ * VERSION: 2.1
  ********************************
  *
+ * - 2.1: Add microphone support
  * - 2.0: Add support for core options v2 interface
  * - 1.3: Move translations to libretro_core_options_intl.h
  *        - libretro_core_options_intl.h includes BOM and utf-8
@@ -259,9 +260,24 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       {
          { "Blow Noise",  NULL },
          { "White Noise", NULL },
+         { "Microphone Input", NULL},
          { NULL, NULL },
       },
-      "Blow Noise"
+      "Microphone Input"
+   },
+   {
+      "melonds_need_button_mic_input",
+      "Listen for Mic Input",
+      NULL,
+      "Set the microphone to be active when the mic button is held, or at all times.",
+      NULL,
+      "audio",
+      {
+         { "With Button", NULL },
+         { "Always",  NULL },
+         { NULL, NULL },
+      },
+      "With Button"
    },
    {
       "melonds_audio_bitrate",

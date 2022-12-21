@@ -289,6 +289,8 @@ enum retro_language
    RETRO_LANGUAGE_CZECH               = 27,
    RETRO_LANGUAGE_CATALAN_VALENCIA    = 28,
    RETRO_LANGUAGE_CATALAN             = 29,
+   RETRO_LANGUAGE_BRITISH_ENGLISH     = 30,
+   RETRO_LANGUAGE_HUNGARIAN           = 31,
    RETRO_LANGUAGE_LAST,
 
    /* Ensure sizeof(enum) == sizeof(int) */
@@ -1765,6 +1767,22 @@ enum retro_mod
                                             * (see enum retro_savestate_context)
                                             */
 
+#define RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE (73 | RETRO_ENVIRONMENT_EXPERIMENTAL)
+                                           /* struct retro_microphone_interface * --
+                                            * Returns an interface that can be used to receive audio from the audio driver.
+                                            *
+                                            * Create the interface and this callback will populate it.
+                                            *
+                                            * If the frontend and audio driver support microphones,
+                                            * all function pointers will be non-NULL.
+                                            * Otherwise, all function pointers will be NULL.
+                                            */
+
+#define RETRO_ENVIRONMENT_GET_MICROPHONE_ENABLED (74 | RETRO_ENVIRONMENT_EXPERIMENTAL)
+                                           /* bool * --
+                                            * Returns true if the user has enabled the microphone,
+                                            * regardless of whether the current audio driver supports it.
+                                            */
 /* VFS functionality */
 
 /* File paths:
@@ -3009,13 +3027,13 @@ enum retro_savestate_context
 
    /* Savestate where you are guaranteed that the same instance will load the save state.
     * You can store internal pointers to code or data.
-    * It's still a full serialization and deserialization, and could be loaded or saved at any time. 
+    * It's still a full serialization and deserialization, and could be loaded or saved at any time.
     * It won't be written to disk or sent over the network.
     */
    RETRO_SAVESTATE_CONTEXT_RUNAHEAD_SAME_INSTANCE = 1,
 
    /* Savestate where you are guaranteed that the same emulator binary will load that savestate.
-    * You can skip anything that would slow down saving or loading state but you can not store internal pointers. 
+    * You can skip anything that would slow down saving or loading state but you can not store internal pointers.
     * It won't be written to disk or sent over the network.
     * Example: "Second Instance" runahead
     */
@@ -3778,6 +3796,118 @@ struct retro_throttle_state
     * This won't be accurate if the total processing time of the core and
     * the frontend is longer than what is available for one frame. */
    float rate;
+};
+
+/**
+ * Opaque handle to a microphone that's been opened for use.
+ * You don't access microphone objects directly;
+ * use the retro_microphone_interface.
+ */
+typedef struct retro_microphone retro_microphone_t;
+
+/**
+ * Initializes a new microphone.
+ * Assuming that microphone support is enabled and provided by the frontend,
+ * you can call this whenever your core needs it.
+ * You could call this to keep a microphone throughout your core's lifetime,
+ * or you could call this when a microphone is plugged in to the emulated device.
+ *
+ * @returns \c NULL if a microphone couldn't be initialized.
+ * This likely means that no microphone is plugged in and recognized,
+ * or the maximum number of supported microphones has been reached.
+ */
+typedef retro_microphone_t *(RETRO_CALLCONV *retro_init_microphone_t)(void);
+
+/**
+ * Closes a microphone that was initialized with \c retro_init_microphone.
+ * Calling this function will stop all microphone activity
+ * and free up the resources that it allocated.
+ * Afterwards, the handle is invalid and must not be used.
+ *
+ * @param microphone Pointer to the microphone that was allocated by init_microphone.
+ * If \c NULL, this function does nothing.
+ */
+typedef void (RETRO_CALLCONV *retro_free_microphone_t)(retro_microphone_t *microphone);
+
+/**
+ * Enables or disables the given microphone.
+ * Microphones are disabled by default
+ * and must be explicitly enabled before they can be used.
+ * Disabled microphones will not process incoming audio samples,
+ * and will therefore have minimal impact on overall performance.
+ * You may enable microphones throughout the lifetime of a core,
+ * or only in instances where they're needed.
+ *
+ * Your core should be able to operate without microphone input;
+ * we suggest substituting silence in this case.
+ *
+ * Calling this function while the audio driver is paused
+ * \em will update the state of the microphone,
+ * but it won't reactivate it.
+ * You'll have to resume the audio driver for that.
+ *
+ * @param microphone Opaque handle to the microphone
+ * whose state will be adjusted.
+ * This will have been provided by \c init_microphone.
+ * @param state \c true if the microphone should receive audio input,
+ * @c false if it should be idle.
+ * @returns \c true if the microphone's state was successfully set,
+ * \c false if \c microphone is invalid
+ * or if there was an error.
+ */
+typedef bool (RETRO_CALLCONV *retro_set_microphone_state_t)(retro_microphone_t *microphone, bool state);
+
+/**
+ * Queries the active state of a microphone at the given index.
+ * Will return whether the microphone is enabled,
+ * even if the driver is paused.
+ *
+ * @param microphone Opaque handle to the microphone
+ * whose state will be queried.
+ * @return true if the provided \c microphone is valid and active,
+ * false if not or if there was an error.
+ */
+typedef bool (RETRO_CALLCONV *retro_get_microphone_state_t)(const retro_microphone_t *microphone);
+
+/**
+ * Retrieves the input processed by the microphone since the previous frame.
+ * If called while the microphone or the audio driver are disabled,
+ * then nothing will be copied into data.
+ *
+ * @param microphone Opaque handle to the microphone
+ * whose recent input will be retrieved.
+ * @param data The buffer that will be used to store the microphone's data.
+ * Microphone input is in mono (i.e. one number per sample).
+ * Should be large enough to accommodate the expected number of samples per frame;
+ * for example, a 44.1kHz sample rate at 60 FPS would require space for 735 samples.
+ * @param data_length The size of the data buffer, in samples (\em not bytes).
+ *
+ * @return The number of samples that were collected this frame.
+ * Will return -1 if the microphone is disabled,
+ * the audio driver is paused,
+ * or there was an error.
+ */
+typedef int (RETRO_CALLCONV *retro_get_microphone_input_t)(retro_microphone_t *microphone, int16_t* data, size_t data_length);
+
+/**
+ * An interface for querying the microphone and accessing data read from it.
+ * All fields in this interface are populated by the frontend
+ * by way of the the RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE callback.
+ * All fields will be non-NULL,
+ * even if the frontend (or its audio driver) doesn't support microphones.
+ */
+struct retro_microphone_interface
+{
+   /**
+    * True if the driver and frontend support microphones.
+    * Set by the frontend.
+    */
+   bool supported;
+   retro_init_microphone_t init_microphone;
+   retro_free_microphone_t free_microphone;
+   retro_set_microphone_state_t set_microphone_state;
+   retro_get_microphone_state_t get_microphone_state;
+   retro_get_microphone_input_t get_microphone_input;
 };
 
 /* Callbacks */
