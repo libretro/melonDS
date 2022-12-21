@@ -63,7 +63,6 @@ static bool hybrid_options = true;
 static bool jit_options = true;
 #endif
 
-static void Mic_FeedNoise();
 MicInputMode micNoiseType = WhiteNoise;
 retro_microphone_interface micInterface = {false};
 retro_microphone_t *micHandle = NULL;
@@ -802,7 +801,7 @@ void retro_run(void)
           }
           case BlowNoise: // blow noise
           {
-              Mic_FeedNoise();
+              Frontend::Mic_FeedNoise(); // despite the name, this feeds a blow noise
               break;
           }
           case MicInput: // microphone input
@@ -816,12 +815,12 @@ void retro_run(void)
               } // If the mic isn't available, go to the default case
           }
           default:
-              NDS::MicInputFrame(NULL, 0);
+              Frontend::Mic_FeedSilence();
       }
    }
    else
    {
-      NDS::MicInputFrame(NULL, 0);
+      Frontend::Mic_FeedSilence();
    }
 
    if (current_renderer != CurrentRenderer::None) NDS::RunFrame();
@@ -842,23 +841,6 @@ void retro_run(void)
    }
 
    NDSCart_SRAMManager::Flush();
-}
-
-void Mic_FeedNoise()
-{
-    int sample_len = sizeof(mic_blow) / sizeof(u16);
-    static int sample_pos = 0;
-
-    s16 tmp[735];
-
-    for (int i = 0; i < 735; i++)
-    {
-        tmp[i] = mic_blow[sample_pos];
-        sample_pos++;
-        if (sample_pos >= sample_len) sample_pos = 0;
-    }
-
-    NDS::MicInputFrame(tmp, 735);
 }
 
 static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
