@@ -1776,6 +1776,8 @@ enum retro_mod
                                             * If the frontend and audio driver support microphones,
                                             * all function pointers will be non-NULL.
                                             * Otherwise, all function pointers will be NULL.
+                                            *
+                                            * Returns false if mic support is disabled
                                             */
 
 #define RETRO_ENVIRONMENT_GET_MICROPHONE_ENABLED (74 | RETRO_ENVIRONMENT_EXPERIMENTAL)
@@ -3812,6 +3814,9 @@ typedef struct retro_microphone retro_microphone_t;
  * You could call this to keep a microphone throughout your core's lifetime,
  * or you could call this when a microphone is plugged in to the emulated device.
  *
+ * The returned handle will be valid until it's freed,
+ * even if the audio driver is reinitialized.
+ *
  * @returns \c NULL if a microphone couldn't be initialized.
  * This likely means that no microphone is plugged in and recognized,
  * or the maximum number of supported microphones has been reached.
@@ -3876,18 +3881,19 @@ typedef bool (RETRO_CALLCONV *retro_get_microphone_state_t)(const retro_micropho
  *
  * @param microphone Opaque handle to the microphone
  * whose recent input will be retrieved.
- * @param data The buffer that will be used to store the microphone's data.
+ * @param samples The buffer that will be used to store the microphone's data.
  * Microphone input is in mono (i.e. one number per sample).
  * Should be large enough to accommodate the expected number of samples per frame;
  * for example, a 44.1kHz sample rate at 60 FPS would require space for 735 samples.
- * @param data_length The size of the data buffer, in samples (\em not bytes).
+ * @param num_samples The size of the data buffer, in samples (\em not bytes).
+ * Microphone input is in mono, so a "frame" and a "sample" are equivalent in length here.
  *
  * @return The number of samples that were collected this frame.
  * Will return -1 if the microphone is disabled,
  * the audio driver is paused,
  * or there was an error.
  */
-typedef int (RETRO_CALLCONV *retro_get_microphone_input_t)(retro_microphone_t *microphone, int16_t* data, size_t data_length);
+typedef int (RETRO_CALLCONV *retro_get_microphone_input_t)(retro_microphone_t *microphone, int16_t* samples, size_t num_samples);
 
 /**
  * An interface for querying the microphone and accessing data read from it.
