@@ -1767,7 +1767,33 @@ enum retro_mod
                                             * (see enum retro_savestate_context)
                                             */
 
-#define RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE (73 | RETRO_ENVIRONMENT_EXPERIMENTAL)
+#define RETRO_ENVIRONMENT_GET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_SUPPORT (73 | RETRO_ENVIRONMENT_EXPERIMENTAL)
+                                            /* struct retro_hw_render_context_negotiation_interface * --
+                                             * Before calling SET_HW_RNEDER_CONTEXT_NEGOTIATION_INTERFACE, a core can query
+                                             * which version of the interface is supported.
+                                             *
+                                             * Frontend looks at interface_type and returns the maximum supported
+                                             * context negotiation interface version.
+                                             * If the interface_type is not supported or recognized by the frontend, a version of 0
+                                             * must be returned in interface_version and true is returned by frontend.
+                                             *
+                                             * If this environment call returns true with interface_version greater than 0,
+                                             * a core can always use a negotiation interface version larger than what the frontend returns, but only
+                                             * earlier versions of the interface will be used by the frontend.
+                                             * A frontend must not reject a negotiation interface version that is larger than
+                                             * what the frontend supports. Instead, the frontend will use the older entry points that it recognizes.
+                                             * If this is incompatible with a particular core's requirements, it can error out early.
+                                             *
+                                             * Backwards compatibility note:
+                                             * This environment call was introduced after Vulkan v1 context negotiation.
+                                             * If this environment call is not supported by frontend - i.e. the environment call returns false -
+                                             * only Vulkan v1 context negotiation is supported (if Vulkan HW rendering is supported at all).
+                                             * If a core uses Vulkan negotiation interface with version > 1, negotiation may fail unexpectedly.
+                                             * All future updates to the context negotiation interface implies that frontend must support
+                                             * this environment call to query support.
+                                             */
+
+#define RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE (74 | RETRO_ENVIRONMENT_EXPERIMENTAL)
                                            /* struct retro_microphone_interface * --
                                             * Returns an interface that can be used to receive audio from the audio driver.
                                             *
@@ -1777,14 +1803,9 @@ enum retro_mod
                                             * all function pointers will be non-NULL.
                                             * Otherwise, all function pointers will be NULL.
                                             *
-                                            * Returns false if mic support is disabled
+                                            * Returns false if mic support is disabled.
                                             */
 
-#define RETRO_ENVIRONMENT_GET_MICROPHONE_ENABLED (74 | RETRO_ENVIRONMENT_EXPERIMENTAL)
-                                           /* bool * --
-                                            * Returns true if the user has enabled the microphone,
-                                            * regardless of whether the current audio driver supports it.
-                                            */
 /* VFS functionality */
 
 /* File paths:
@@ -3817,9 +3838,15 @@ typedef struct retro_microphone retro_microphone_t;
  * The returned handle will be valid until it's freed,
  * even if the audio driver is reinitialized.
  *
- * @returns \c NULL if a microphone couldn't be initialized.
+ * This should only be called from the main thread.
+ *
+ * @returns Pointer to the newly-opened microphone,
+ * or \c NULL if one couldn't be opened.
  * This likely means that no microphone is plugged in and recognized,
  * or the maximum number of supported microphones has been reached.
+ *
+ * @note Microphones are \em inactive by default;
+ * to begin recording, call set_microphone_state(new_handle, true).
  */
 typedef retro_microphone_t *(RETRO_CALLCONV *retro_init_microphone_t)(void);
 
@@ -3875,9 +3902,12 @@ typedef bool (RETRO_CALLCONV *retro_set_microphone_state_t)(retro_microphone_t *
 typedef bool (RETRO_CALLCONV *retro_get_microphone_state_t)(const retro_microphone_t *microphone);
 
 /**
- * Retrieves the input processed by the microphone since the previous frame.
- * If called while the microphone or the audio driver are disabled,
- * then nothing will be copied into data.
+ * Retrieves the input processed by the microphone since the last call.
+ * \em Must be called every frame unless \c microphone is disabled,
+ * similar to how \c retro_audio_sample_batch_t works.
+ *
+ * If using \c RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK,
+ * then this function should be called within the provided callback.
  *
  * @param microphone Opaque handle to the microphone
  * whose recent input will be retrieved.
@@ -3888,10 +3918,16 @@ typedef bool (RETRO_CALLCONV *retro_get_microphone_state_t)(const retro_micropho
  * @param num_samples The size of the data buffer, in samples (\em not bytes).
  * Microphone input is in mono, so a "frame" and a "sample" are equivalent in length here.
  *
- * @return The number of samples that were collected this frame.
+ * @return The number of samples that were copied into \c samples.
+ * Will return 0 if \c microphone is still pending
+ * because the driver hasn't finished initializing.
+ * This is not an error.
+ *
  * Will return -1 if the microphone is disabled,
  * the audio driver is paused,
  * or there was an error.
+ *
+ * @see RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK
  */
 typedef int (RETRO_CALLCONV *retro_get_microphone_input_t)(retro_microphone_t *microphone, int16_t* samples, size_t num_samples);
 
@@ -3909,6 +3945,8 @@ struct retro_microphone_interface
     * Set by the frontend.
     */
    bool supported;
+
+   /** @copydoc retro_init_microphone_t */
    retro_init_microphone_t init_microphone;
    retro_free_microphone_t free_microphone;
    retro_set_microphone_state_t set_microphone_state;

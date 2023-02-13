@@ -98,25 +98,20 @@ void retro_init(void)
 
    initialize_screnlayout_data(&screen_layout_data);
 
-   bool micEnabled = false;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_MICROPHONE_ENABLED, &micEnabled) && micEnabled)
-   { // If the user has enabled the microphone...
-      log_cb(RETRO_LOG_DEBUG, "[melonDS] Microphone support enabled in the frontend settings\n");
-      if (environ_cb(RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE, &micInterface) && micInterface.supported)
-      { // ...and if the current audio driver supports microphones...
-         log_cb(RETRO_LOG_DEBUG, "[melonDS] Microphone support available in current audio driver\n");
-         micHandle = micInterface.init_microphone();
+  if (environ_cb(RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE, &micInterface) && micInterface.supported)
+  { // ...and if the current audio driver supports microphones...
+     log_cb(RETRO_LOG_DEBUG, "[melonDS] Microphone support available in current audio driver\n");
+     micHandle = micInterface.init_microphone();
 
-         if (micHandle && micInterface.set_microphone_state(micHandle, true))
-         {
-            log_cb(RETRO_LOG_INFO, "[melonDS] Initialized microphone\n");
-         }
-         else
-         {
-            log_cb(RETRO_LOG_WARN, "[melonDS] Failed to initialize microphone, emulated device will receive silence\n");
-         }
-      }
-   }
+     if (micHandle)
+     {
+        log_cb(RETRO_LOG_INFO, "[melonDS] Initialized microphone\n");
+     }
+     else
+     {
+        log_cb(RETRO_LOG_WARN, "[melonDS] Failed to initialize microphone, emulated device will receive silence\n");
+     }
+  }
 }
 
 void retro_deinit(void)
