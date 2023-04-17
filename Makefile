@@ -6,6 +6,7 @@ HAVE_OPENGL    := 0
 HAVE_OPENGLES3 := 0
 HAVE_THREADS   := 0
 HAVE_WIFI      := 1
+HAVE_SLIRP     := 0
 
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
@@ -451,6 +452,10 @@ else
    LDFLAGS += -lws2_32 -lwinmm -lopengl32
    HAVE_OPENGL=1
    HAVE_THREADS=1
+
+   ifeq ($(HAVE_SLIRP), 1)
+      LDFLAGS += -lglib-2.0
+   endif
 
    ifeq ($(MSYSTEM),MINGW64)
       CC ?= x86_64-w64-mingw32-gcc
