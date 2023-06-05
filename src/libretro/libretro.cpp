@@ -50,6 +50,7 @@ bool refresh_opengl = true;
 bool swapped_screens = false;
 bool toggle_swap_screen = false;
 bool swap_screen_toggled = false;
+bool noise_button_required = true;
 
 const int SLOT_1_2_BOOT = 1;
 
@@ -62,8 +63,9 @@ static bool hybrid_options = true;
 static bool jit_options = true;
 #endif
 
-static void Mic_FeedNoise();
-static u8 micNoiseType;
+MicInputMode micNoiseType = WhiteNoise;
+retro_microphone_interface micInterface = {false};
+retro_microphone_t *micHandle = NULL;
 
 enum CurrentRenderer
 {
@@ -101,6 +103,15 @@ void retro_deinit(void)
 {
    libretro_supports_bitmasks = false;
    libretro_supports_option_categories = false;
+
+   if (micHandle && micInterface.close_mic)
+   { // If we were playing with the microphone...
+      micInterface.close_mic(micHandle);
+      micHandle = NULL;
+      micInterface = {0};
+
+      log_cb(RETRO_LOG_DEBUG, "[melonDS] Released previously-allocated microphone\n");
+   }
 }
 
 unsigned retro_api_version(void)
@@ -558,10 +569,34 @@ static void check_variables(bool init)
    var.key = "melonds_mic_input";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
-      if (!strcmp(var.value, "Blow Noise"))
-         micNoiseType = 1;
+      if (!strcmp(var.value, "Microphone Input"))
+         micNoiseType = MicInput;
+      else if (!strcmp(var.value, "Blow Noise"))
+         micNoiseType = BlowNoise;
       else
-         micNoiseType = 0;
+         micNoiseType = WhiteNoise;
+
+      if (micNoiseType != MicInput && micInterface.interface_version && micHandle)
+      { // If the player wants to stop using the real mic as the DS mic's input...
+          micInterface.set_mic_state(micHandle, false);
+      }
+   }
+
+   var.key = "melonds_need_button_mic_input";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "With Button"))
+         noise_button_required = true;
+      else
+         noise_button_required = false;
+
+      if (  noise_button_required &&
+            micInterface.interface_version &&
+            micHandle != NULL &&
+            !input_state.holding_noise_btn)
+      { // If the player wants to require the noise button for mic input and they aren't already holding it...
+          micInterface.set_mic_state(micHandle, false);
+      }
    }
 
    var.key = "melonds_audio_bitrate";
@@ -733,20 +768,39 @@ void retro_run(void)
       }
    }
 
-   if (input_state.holding_noise_btn)
+   if (input_state.holding_noise_btn || !noise_button_required)
    {
-      if (micNoiseType)
-         Mic_FeedNoise();
-      else
+      switch (micNoiseType)
       {
-         s16 tmp[735];
-         for (int i = 0; i < 735; i++) tmp[i] = rand() & 0xFFFF;
-         NDS::MicInputFrame(tmp, 735);
+          case WhiteNoise: // random noise
+          {
+              s16 tmp[735];
+              for (int i = 0; i < 735; i++) tmp[i] = rand() & 0xFFFF;
+              NDS::MicInputFrame(tmp, 735);
+              break;
+          }
+          case BlowNoise: // blow noise
+          {
+              Frontend::Mic_FeedNoise(); // despite the name, this feeds a blow noise
+              break;
+          }
+          case MicInput: // microphone input
+          {
+              s16 tmp[735];
+              if (micHandle && micInterface.interface_version && micInterface.get_mic_state(micHandle))
+              { // If the microphone is enabled and supported...
+                  micInterface.read_mic(micHandle, tmp, 735);
+                  NDS::MicInputFrame(tmp, 735);
+                  break;
+              } // If the mic isn't available, go to the default case
+          }
+          default:
+              Frontend::Mic_FeedSilence();
       }
    }
    else
    {
-      NDS::MicInputFrame(NULL, 0);
+      Frontend::Mic_FeedSilence();
    }
 
    if (current_renderer != CurrentRenderer::None) NDS::RunFrame();
@@ -767,23 +821,6 @@ void retro_run(void)
    }
 
    NDSCart_SRAMManager::Flush();
-}
-
-void Mic_FeedNoise()
-{
-    int sample_len = sizeof(mic_blow) / sizeof(u16);
-    static int sample_pos = 0;
-
-    s16 tmp[735];
-
-    for (int i = 0; i < 735; i++)
-    {
-        tmp[i] = mic_blow[sample_pos];
-        sample_pos++;
-        if (sample_pos >= sample_len) sample_pos = 0;
-    }
-
-    NDS::MicInputFrame(tmp, 735);
 }
 
 static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
@@ -915,6 +952,33 @@ static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
       gba_save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(gba_game_name) + ".srm";
 
       NDS::LoadGBAROM((u8*)info[1].data, info[1].size, gba_game_name, gba_save_path.c_str());
+   }
+
+   micInterface.interface_version = RETRO_MICROPHONE_INTERFACE_VERSION;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_MICROPHONE_INTERFACE, &micInterface))
+   { // ...and if the current audio driver supports microphones...
+      if (micInterface.interface_version != RETRO_MICROPHONE_INTERFACE_VERSION)
+      {
+          log_cb(RETRO_LOG_WARN, "[melonDS] Expected mic interface version %u, got %u. Compatibility issues are possible.\n",
+             RETRO_MICROPHONE_INTERFACE_VERSION, micInterface.interface_version);
+      }
+
+      log_cb(RETRO_LOG_DEBUG, "[melonDS] Microphone support available in current audio driver (version %u)\n",
+             micInterface.interface_version);
+
+      retro_microphone_params_t params = {
+         .rate = 44100 // The core engine assumes this rate
+      };
+      micHandle = micInterface.open_mic(&params);
+
+      if (micHandle)
+      {
+         log_cb(RETRO_LOG_INFO, "[melonDS] Initialized microphone\n");
+      }
+      else
+      {
+         log_cb(RETRO_LOG_WARN, "[melonDS] Failed to initialize microphone, emulated device will receive silence\n");
+      }
    }
 
    return true;
