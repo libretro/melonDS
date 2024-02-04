@@ -58,7 +58,7 @@ void update_input(InputState *state)
    state->holding_noise_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2);
    state->swap_screens_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
 
-   if(current_screen_layout != ScreenLayout::TopOnly)
+   if(screen_layout_data.displayed_layout != ScreenLayout::TopOnly)
    {
       switch(state->current_touch_mode)
       {
