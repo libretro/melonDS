@@ -2420,7 +2420,11 @@ void ExecuteCommand()
                     break;
 
                 default:
+#ifdef _MSC_VER
+                    __assume(0);
+#else
                     __builtin_unreachable();
+#endif
                 }
             }
         }
