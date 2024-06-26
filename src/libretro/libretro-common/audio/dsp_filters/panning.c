@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2017 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (panning.c).
@@ -104,7 +104,6 @@ static const struct dspfilter_implementation panning = {
 const struct dspfilter_implementation *
 dspfilter_get_implementation(dspfilter_simd_mask_t mask)
 {
-   (void)mask;
    return &panning;
 }
 

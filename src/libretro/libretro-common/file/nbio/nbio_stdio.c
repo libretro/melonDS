@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (nbio_stdio.c).
@@ -22,6 +22,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(WIIU)
+#include <malloc.h>
+#endif
 
 #include <file/nbio.h>
 #include <encodings/utf.h>
@@ -33,6 +36,18 @@
 #define LEGACY_WIN32
 #endif
 
+#endif
+
+#if defined(_WIN32)
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+#define ATLEAST_VC2005
+#endif
+#endif
+
+#if (defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE - 0) >= 200112) || (defined(__POSIX_VISIBLE) && __POSIX_VISIBLE >= 200112) || (defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112) || __USE_LARGEFILE || (defined(_FILE_OFFSET_BITS) && _FILE_OFFSET_BITS == 64)
+#ifndef HAVE_64BIT_OFFSETS
+#define HAVE_64BIT_OFFSETS
+#endif
 #endif
 
 struct nbio_stdio_t
@@ -57,11 +72,35 @@ static const char    *stdio_modes[] = { "rb", "wb", "r+b", "rb", "wb", "r+b" };
 static const wchar_t *stdio_modes[] = { L"rb", L"wb", L"r+b", L"rb", L"wb", L"r+b" };
 #endif
 
+static int64_t fseek_wrap(FILE *f, int64_t offset, int origin)
+{
+#ifdef ATLEAST_VC2005
+   /* VC2005 and up have a special 64-bit fseek */
+   return _fseeki64(f, offset, origin);
+#elif defined(HAVE_64BIT_OFFSETS)
+   return fseeko(f, (off_t)offset, origin);
+#else
+   return fseek(f, (long)offset, origin);
+#endif
+}
+
+static int64_t ftell_wrap(FILE *f)
+{
+#ifdef ATLEAST_VC2005
+   /* VC2005 and up have a special 64-bit ftell */
+   return _ftelli64(f);
+#elif defined(HAVE_64BIT_OFFSETS)
+   return ftello(f);
+#else
+   return ftell(f);
+#endif
+}
+
 static void *nbio_stdio_open(const char * filename, unsigned mode)
 {
    void *buf                   = NULL;
    struct nbio_stdio_t* handle = NULL;
-   size_t len                  = 0;
+   int64_t len                 = 0;
 #if !defined(_WIN32) || defined(LEGACY_WIN32)
    FILE* f                     = fopen(filename, stdio_modes[mode]);
 #else
@@ -87,15 +126,21 @@ static void *nbio_stdio_open(const char * filename, unsigned mode)
       case BIO_WRITE:
          break;
       default:
-         fseek(handle->f, 0, SEEK_END);
-         len = ftell(handle->f);
+         fseek_wrap(handle->f, 0, SEEK_END);
+         len = ftell_wrap(handle->f);
          break;
    }
 
    handle->mode          = mode;
 
+#if defined(WIIU)
+   /* hit the aligned-buffer fast path on Wii U */
    if (len)
-      buf                = malloc(len);
+      buf                = memalign(0x40, (size_t)len);
+#else
+   if (len)
+      buf                = malloc((size_t)len);
+#endif
 
    if (len && !buf)
       goto error;
@@ -123,7 +168,7 @@ static void nbio_stdio_begin_read(void *data)
    if (handle->op >= 0)
       abort();
 
-   fseek(handle->f, 0, SEEK_SET);
+   fseek_wrap(handle->f, 0, SEEK_SET);
 
    handle->op       = NBIO_READ;
    handle->progress = 0;
@@ -138,7 +183,7 @@ static void nbio_stdio_begin_write(void *data)
    if (handle->op >= 0)
       abort();
 
-   fseek(handle->f, 0, SEEK_SET);
+   fseek_wrap(handle->f, 0, SEEK_SET);
    handle->op = NBIO_WRITE;
    handle->progress = 0;
 }

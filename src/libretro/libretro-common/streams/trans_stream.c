@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (trans_stream.c).
@@ -45,13 +45,10 @@ bool trans_stream_trans_full(
    uint32_t rd, wn;
 
    if (data && *data)
-   {
       rdata = *data;
-   }
    else
    {
-      rdata = backend->stream_new();
-      if (!rdata)
+      if (!(rdata = backend->stream_new()))
       {
          if (error)
             *error = TRANS_STREAM_ERROR_ALLOCATION_FAILURE;

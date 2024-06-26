@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (dylib.h).
@@ -49,7 +49,7 @@ typedef void (*function_t)(void);
  *
  * Platform independent dylib loading.
  *
- * Returns: library handle on success, otherwise NULL.
+ * @return Library handle on success, otherwise NULL.
  **/
 dylib_t dylib_load(const char *path);
 

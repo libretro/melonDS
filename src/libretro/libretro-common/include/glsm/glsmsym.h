@@ -126,7 +126,6 @@ RETRO_BEGIN_DECLS
 #define glBlendFuncSeparate         rglBlendFuncSeparate
 #define glDepthFunc                 rglDepthFunc
 #define glColorMask                 rglColorMask
-#define glColorMaski                rglColorMaski
 #define glClearColor                rglClearColor
 #define glViewport                  rglViewport
 #define glScissor                   rglScissor
@@ -187,11 +186,6 @@ RETRO_BEGIN_DECLS
 #define glFlushMappedBufferRange    rglFlushMappedBufferRange
 #define glClientWaitSync            rglClientWaitSync
 #define glDrawElementsBaseVertex    rglDrawElementsBaseVertex
-#define glFlush                     rglFlush
-#define glTexParameteri             rglTexParameteri
-#define glTexImage2D                rglTexImage2D
-#define glDrawBuffer                rglDrawBuffer
-#define glReadPixels                rglReadPixels
 
 const GLubyte* rglGetStringi(GLenum name, GLuint index);
 void rglTexBuffer(GLenum target, GLenum internalFormat, GLuint buffer);
@@ -338,7 +332,6 @@ void rglBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha,
       GLenum dstAlpha);
 void rglDepthFunc(GLenum func);
 void rglColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
-void rglColorMaski(GLint buf, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
 void rglClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
 void rglViewport(GLint x, GLint y, GLsizei width, GLsizei height);
 void rglScissor(GLint x, GLint y, GLsizei width, GLsizei height);
@@ -484,11 +477,6 @@ void rglUniform2iv(	GLint location,
  	const GLint *value);
 void rglProvokingVertex(	GLenum provokeMode);
 void rglDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, GLvoid *indices, GLint basevertex);
-void rglFlush(void);
-void rglTexParameteri(GLenum target, GLenum pname, GLint param);
-void rglTexImage2D(GLenum target,GLint level, GLint internalformat, GLsizei width, GLsizei height,GLint border, GLenum format,	GLenum type, const GLvoid * data);
-void rglDrawBuffer(GLenum buf);
-void rglReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid * data);
 
 RETRO_END_DECLS
 

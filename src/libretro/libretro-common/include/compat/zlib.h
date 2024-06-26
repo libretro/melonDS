@@ -1196,8 +1196,8 @@ typedef int (*out_func) (void FAR *, unsigned char FAR *, unsigned);
    compress() or compress2() call to allocate the destination buffer.
 */
 
- int  uncompress (unsigned char *dest,   uint32_t *destLen,
-       const unsigned char *source, uint32_t sourceLen);
+ int  uncompress (Bytef *dest,   uLongf *destLen,
+       const Bytef *source, uLongf sourceLen);
 /*
      Decompresses the source buffer into the destination buffer.  sourceLen is
    the byte length of the source buffer.  Upon entry, destLen is the total size
@@ -1742,8 +1742,9 @@ uint32_t adler32 (uint32_t adler, const uint8_t *buf, size_t len);
  const char   *  zError           (int);
  int             inflateSyncPoint (z_streamp);
 
-const uint32_t * get_crc_table(void);
+ const uint32_t * get_crc_table(void);
  int             inflateUndermine (z_streamp, int);
+ int             inflateValidate  (z_streamp, int);
  int             inflateResetKeep (z_streamp);
  int             deflateResetKeep (z_streamp);
 #if defined(_WIN32) && !defined(Z_SOLO)
