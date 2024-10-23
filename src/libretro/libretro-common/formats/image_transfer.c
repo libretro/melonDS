@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (image_transfer.c).
@@ -22,7 +22,8 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <errno.h>
+
+#include <boolean.h>
 
 #ifdef HAVE_RPNG
 #include <formats/rpng.h>

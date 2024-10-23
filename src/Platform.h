@@ -31,6 +31,10 @@
 #define fread rfread
 #define fseek rfseek
 
+#ifdef _MSC_VER
+#include <compat/msvc.h>
+#endif
+
 #endif
 
 namespace Platform

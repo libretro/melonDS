@@ -510,24 +510,6 @@ void rglColorMask(GLboolean red, GLboolean green,
 /*
  *
  * Core in:
- * OpenGLES  : 3.2
- */
-void rglColorMaski(GLint buf, GLboolean red, GLboolean green,
-      GLboolean blue, GLboolean alpha)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glColorMaski.\n");
-#endif
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES) && defined(HAVE_OPENGLES_3_2)
-   glsm_ctl(GLSM_CTL_IMM_VBO_DRAW, NULL);
-   glColorMaski(buf, red, green, blue, alpha);
-   // TODO: Does the state of this need to be tracked?
-#endif
-}
-
-/*
- *
- * Core in:
  * OpenGLES  : 2.0
  */
 void rglCullFace(GLenum mode)
@@ -2574,80 +2556,6 @@ void rglDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type,
 #endif
 #if defined(HAVE_OPENGL)
    glDrawElementsBaseVertex(mode, count, type, indices, basevertex);
-#endif
-}
-
-void rglFlush(void)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glFlush.\n");
-#endif
-   glFlush();
-}
-
-/*
- *
- * Core in:
- * OpenGL    : 2.0
- * OpenGLES  : 2.0
- */
-void rglTexParameteri(GLenum target, GLenum pname, GLint param)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glDrawElementsBaseVertex.\n");
-#endif
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
-   glTexParameteri(target, pname, param);
-#endif
-}
-
-/*
- *
- * Core in:
- * OpenGL    : 2.0
- * OpenGLES  : 2.0
- */
-void rglTexImage2D(GLenum target, GLint level, GLint internalformat, GLsizei width,
-	GLsizei height,GLint border, GLenum format,	GLenum type, const GLvoid * data)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glTexImage2D.\n");
-#endif
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
-   glTexImage2D(target, level, internalformat, width, height, border, format, type, data);
-#endif
-}
-
-/*
- *
- * Core in:
- * OpenGL    : 2.0
- * OpenGLES  : 3.0
- */
-void rglDrawBuffer(GLenum buf)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glDrawBuffer.\n");
-#endif
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES3)
-   glDrawBuffer(buf);
-#endif
-}
-
-/*
- *
- * Core in:
- * OpenGL    : 2.0
- * OpenGLES  : 2.0
- */
-void rglReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
-   GLenum format, GLenum type, GLvoid * data)
-{
-#ifdef GLSM_DEBUG
-   log_cb(RETRO_LOG_INFO, "glFinish.\n");
-#endif
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
-   glReadPixels(x, y, width, height, format, type, data);
 #endif
 }
 

@@ -26,6 +26,10 @@
 #include <initializer_list>
 #include <algorithm>
 
+#ifdef _MSC_VER
+#include <bit>
+#endif
+
 // like std::bitset but less stupid and optimised for 
 // our use case (keeping track of memory invalidations)
 
@@ -88,8 +92,11 @@ struct NonStupidBitField
                 return;
             done:;
             }
-
+#ifdef _MSC_VER
+            BitIdx = std::countr_zero(RemainingBits);
+#else
             BitIdx = __builtin_ctzll(RemainingBits);
+#endif
             RemainingBits &= ~(1ULL << BitIdx);
 
             if ((Size & 0x3F) && BitIdx >= Size)
@@ -144,7 +151,11 @@ struct NonStupidBitField
     {
         for (u32 i = 0; i < DataLength; i++)
         {
+#ifdef _MSC_VER
+            u32 idx = std::countr_zero(Data[i]);
+#else
             u32 idx = __builtin_ctzll(Data[i]);
+#endif
             if (Data[i] && idx + i * 64 < Size)
             {
                 return {*this, i, idx, Data[i] & ~(1ULL << idx)};
