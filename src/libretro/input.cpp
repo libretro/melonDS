@@ -32,7 +32,7 @@ void update_input(InputState *state)
       for (i = 0; i < (RETRO_DEVICE_ID_JOYPAD_R3 + 1); i++)
          joypad_bits |= input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
    }
-   
+
    ADD_KEY_TO_MASK(RETRO_DEVICE_ID_JOYPAD_A,      0,  joypad_bits);
    ADD_KEY_TO_MASK(RETRO_DEVICE_ID_JOYPAD_B,      1,  joypad_bits);
    ADD_KEY_TO_MASK(RETRO_DEVICE_ID_JOYPAD_SELECT, 2,  joypad_bits);
@@ -83,7 +83,12 @@ void update_input(InputState *state)
                int16_t pointer_x = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
                int16_t pointer_y = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
 
-               unsigned int touch_scale = screen_layout_data.displayed_layout == ScreenLayout::HybridBottom ? screen_layout_data.hybrid_ratio : 1;
+               unsigned int touch_scale = 1;
+               if (screen_layout_data.displayed_layout == ScreenLayout::HybridBottom) {
+                  touch_scale = screen_layout_data.hybrid_ratio_large;
+               } else if (screen_layout_data.displayed_layout == ScreenLayout::HybridTop) {
+                  touch_scale = screen_layout_data.hybrid_ratio_small;
+               }
 
                unsigned int x = ((int)pointer_x + 0x8000) * screen_layout_data.buffer_width / 0x10000 / touch_scale;
                unsigned int y = ((int)pointer_y + 0x8000) * screen_layout_data.buffer_height / 0x10000 / touch_scale;

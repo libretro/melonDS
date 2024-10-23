@@ -380,10 +380,13 @@ static void check_variables(bool init)
    var.key = "melonds_hybrid_ratio";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value != NULL)
    {
-      screen_layout_data.hybrid_ratio = std::stoi(var.value);
+      // value is a string like "2:1", cut it apart and convert to number
+      screen_layout_data.hybrid_ratio_large = var.value[0] - '0';
+      screen_layout_data.hybrid_ratio_small = var.value[2] - '0';
    }
 #else
-   screen_layout_data.hybrid_ratio = 2;
+   screen_layout_data.hybrid_ratio_large = 2;
+   screen_layout_data.hybrid_ratio_small = 1;
 #endif
 
    var.key = "melonds_hybrid_small_screen";
@@ -723,11 +726,11 @@ void retro_run(void)
             refresh_opengl = true;
          }
 
-         swapped_screens = input_state.swap_screens_btn; 
+         swapped_screens = input_state.swap_screens_btn;
       }
       else
       {
-         swapped_screens = input_state.swap_screens_btn; 
+         swapped_screens = input_state.swap_screens_btn;
          update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
          refresh_opengl = true;
       }
@@ -900,7 +903,7 @@ static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
    NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
    NDS::LoadROM((u8*)info->data, info->size, save_path.c_str(), Config::DirectBoot);
-   
+
    if (type == SLOT_1_2_BOOT)
    {
       char gba_game_name[256];
