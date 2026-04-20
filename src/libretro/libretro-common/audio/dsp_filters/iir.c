@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2017 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (iir.c).
@@ -142,6 +142,7 @@ static enum IIRFilter str_to_type(const char *str)
 
    return LPF; /* Fallback. */
 }
+#undef CHECK
 
 static void make_poly_from_roots(
       const double *roots, unsigned num_roots, float *poly)
@@ -223,7 +224,8 @@ static void iir_filter_init(struct iir_data *iir,
       case RIAA_phono: /* http://www.dsprelated.com/showmessage/73300/3.php */
       {
          double y, b_re, a_re, b_im, a_im, g;
-         float b[3], a[3];
+         float b[3] = {0.0f};
+         float a[3] = {0.0f};
 
          if ((int)sample_rate == 44100)
          {
@@ -363,7 +365,6 @@ static const struct dspfilter_implementation iir_plug = {
 
 const struct dspfilter_implementation *dspfilter_get_implementation(dspfilter_simd_mask_t mask)
 {
-   (void)mask;
    return &iir_plug;
 }
 

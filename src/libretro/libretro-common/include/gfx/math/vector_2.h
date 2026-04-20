@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
  * The following license statement only applies to this file (vector_2.h).
@@ -54,7 +54,7 @@ static INLINE float overflow(void)
    unsigned i;
    volatile float f = 1e10;
 
-   for(i = 0; i < 10; ++i)
+   for (i = 0; i < 10; ++i)
       f *= f;
    return f;
 }
@@ -75,22 +75,22 @@ static INLINE int16_t tofloat16(float f)
    e       = ((i >> 23) & 0x000000ff) - (127 - 15);
    m       =   i        & 0x007fffff;
 
-   if(e <= 0)
+   if (e <= 0)
    {
-      if(e < -10)
+      if (e < -10)
          return (int16_t)(s);
 
       m = (m | 0x00800000) >> (1 - e);
 
-      if(m & 0x00001000)
+      if (m & 0x00001000)
          m += 0x00002000;
 
       return (int16_t)(s | (m >> 13));
    }
 
-   if(e == 0xff - (127 - 15))
+   if (e == 0xff - (127 - 15))
    {
-      if(m == 0)
+      if (m == 0)
          return (int16_t)(s | 0x7c00);
 
       m >>= 13;
@@ -98,11 +98,11 @@ static INLINE int16_t tofloat16(float f)
       return (int16_t)(s | 0x7c00 | m | (m == 0));
    }
 
-   if(m &  0x00001000)
+   if (m &  0x00001000)
    {
       m += 0x00002000;
 
-      if(m & 0x00800000)
+      if (m & 0x00800000)
       {
          m =  0;
          e += 1;

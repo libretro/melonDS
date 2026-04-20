@@ -1,7 +1,7 @@
-/* Copyright  (C) 2010-2019 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
- * The following license statement only applies to this file (file_path.h).
+ * The following license statement only applies to this file (label_sanitization.c).
  * ---------------------------------------------------------------------------------------
  *
  * Permission is hereby granted, free of charge,
@@ -26,20 +26,19 @@
 #include <string/stdstring.h>
 #include <string.h>
 
-const size_t disc_strings_length = 3;
+#define DISC_STRINGS_LENGTH   3
+#define REGION_STRINGS_LENGTH 20
 
-const char *disc_strings[3] = {
+const char *disc_strings[DISC_STRINGS_LENGTH] = {
    "(CD",
    "(Disc",
    "(Disk"
 };
 
-const size_t region_strings_length = 20;
-
 /*
  * We'll use the standard No-Intro regions for now.
  */
-const char *region_strings[20] = {
+const char *region_strings[REGION_STRINGS_LENGTH] = {
    "(Australia)", /* Don’t use with Europe */
    "(Brazil)",
    "(Canada)",    /* Don’t use with USA */
@@ -62,9 +61,11 @@ const char *region_strings[20] = {
    "(USA, Europe)"
 };
 
-/*
- * Does not work with nested blocks.
- */
+/**
+ * label_sanitize:
+ *
+ * NOTE: Does not work with nested blocks.
+ **/
 void label_sanitize(char *label, bool (*left)(char*), bool (*right)(char*))
 {
    bool copy = true;
@@ -78,16 +79,25 @@ void label_sanitize(char *label, bool (*left)(char*), bool (*right)(char*))
       {
          /* check for the start of the range */
          if ((*left)(&label[lindex]))
-            copy = false;
+            copy                = false;
+         else
+         {
+            const bool whitespace = label[lindex] == ' ' && (rindex == 0 || new_label[rindex - 1] == ' ');
 
-         if (copy)
-            new_label[rindex++] = label[lindex];
+            /* Simplify consecutive whitespaces */
+            if (!whitespace)
+               new_label[rindex++] = label[lindex];
+         }
       }
       else if ((*right)(&label[lindex]))
          copy = true;
    }
 
-   new_label[rindex] = '\0';
+   /* Trim trailing whitespace */
+   if (rindex > 0 && new_label[rindex - 1] == ' ')
+      new_label[rindex - 1] = '\0';
+   else
+      new_label[rindex] = '\0';
 
    strlcpy(label, new_label, PATH_MAX_LENGTH);
 }
@@ -129,16 +139,16 @@ static bool left_exclusion(char *left,
    char exclusion_string[32];
    char comparison_string[32];
 
-   strlcpy(exclusion_string, left, 32);
+   strlcpy(exclusion_string, left, sizeof(exclusion_string));
    string_to_upper(exclusion_string);
 
    for (i = 0; i < (unsigned)strings_count; i++)
    {
-      strlcpy(comparison_string, strings[i], 32);
+      strlcpy(comparison_string, strings[i], sizeof(comparison_string));
       string_to_upper(comparison_string);
 
-      if (string_is_equal_fast(exclusion_string,
-               comparison_string, strlen(comparison_string)))
+      if (string_starts_with(exclusion_string,
+               comparison_string))
          return true;
    }
 
@@ -148,20 +158,20 @@ static bool left_exclusion(char *left,
 static bool left_parens_or_brackets_excluding_region(char *left)
 {
    return left_parens_or_brackets(left)
-      && !left_exclusion(left, region_strings, region_strings_length);
+      && !left_exclusion(left, region_strings, REGION_STRINGS_LENGTH);
 }
 
 static bool left_parens_or_brackets_excluding_disc(char *left)
 {
    return left_parens_or_brackets(left)
-      && !left_exclusion(left, disc_strings, disc_strings_length);
+      && !left_exclusion(left, disc_strings, DISC_STRINGS_LENGTH);
 }
 
 static bool left_parens_or_brackets_excluding_region_or_disc(char *left)
 {
    return left_parens_or_brackets(left)
-      && !left_exclusion(left, region_strings, region_strings_length)
-      && !left_exclusion(left, disc_strings, disc_strings_length);
+      && !left_exclusion(left, region_strings, REGION_STRINGS_LENGTH)
+      && !left_exclusion(left, disc_strings, DISC_STRINGS_LENGTH);
 }
 
 void label_remove_parens(char *label)
@@ -176,20 +186,24 @@ void label_remove_brackets(char *label)
 
 void label_remove_parens_and_brackets(char *label)
 {
-   label_sanitize(label, left_parens_or_brackets, right_parens_or_brackets);
+   label_sanitize(label, left_parens_or_brackets,
+         right_parens_or_brackets);
 }
 
 void label_keep_region(char *label)
 {
-   label_sanitize(label, left_parens_or_brackets_excluding_region, right_parens_or_brackets);
+   label_sanitize(label, left_parens_or_brackets_excluding_region,
+         right_parens_or_brackets);
 }
 
 void label_keep_disc(char *label)
 {
-   label_sanitize(label, left_parens_or_brackets_excluding_disc, right_parens_or_brackets);
+   label_sanitize(label, left_parens_or_brackets_excluding_disc,
+         right_parens_or_brackets);
 }
 
 void label_keep_region_and_disc(char *label)
 {
-   label_sanitize(label, left_parens_or_brackets_excluding_region_or_disc, right_parens_or_brackets);
+   label_sanitize(label, left_parens_or_brackets_excluding_region_or_disc,
+         right_parens_or_brackets);
 }

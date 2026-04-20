@@ -23,6 +23,10 @@
 
 #include "GPU2D_Soft.h"
 
+#ifdef _MSC_VER
+#include <bit>
+#endif
+
 namespace GPU
 {
 
@@ -515,7 +519,11 @@ void SetRenderSettings(int renderer, RenderSettings& settings)
 u8* GetUniqueBankPtr(u32 mask, u32 offset)
 {
     if (!mask || (mask & (mask - 1)) != 0) return NULL;
+#ifdef _MSC_VER
+    int num = std::countr_zero(mask);
+#else
     int num = __builtin_ctz(mask);
+#endif
     return &VRAM[num][offset & VRAMMask[num]];
 }
 
@@ -1211,7 +1219,11 @@ NonStupidBitField<Size/VRAMDirtyGranularity> VRAMTrackingSet<Size, MappingGranul
 
             while (mapping != 0)
             {
+#ifdef _MSC_VER
+                u32 num = std::countr_zero(mapping);
+#else
                 u32 num = __builtin_ctz(mapping);
+#endif
                 mapping &= ~(1 << num);
 
                 // hack for **speed**
@@ -1246,7 +1258,11 @@ NonStupidBitField<Size/VRAMDirtyGranularity> VRAMTrackingSet<Size, MappingGranul
 
     while (banksToBeZeroed != 0)
     {
+#ifdef _MSC_VER
+        u32 num = std::countr_zero(banksToBeZeroed);
+#else
         u32 num = __builtin_ctz(banksToBeZeroed);
+#endif
         banksToBeZeroed &= ~(1 << num);
         VRAMDirty[num].Clear();
     }

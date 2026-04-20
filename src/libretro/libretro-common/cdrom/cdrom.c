@@ -1,4 +1,4 @@
-/* Copyright  (C) 2010-2019 The RetroArch team
+/* Copyright  (C) 2010-2020 The RetroArch team
 *
 * ---------------------------------------------------------------------------------------
 * The following license statement only applies to this file (cdrom.c).
@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <compat/strl.h>
+#include <compat/strcasestr.h>
 #include <retro_math.h>
 #include <retro_timers.h>
 #include <streams/file_stream.h>
@@ -96,6 +97,7 @@ void increment_msf(unsigned char *min, unsigned char *sec, unsigned char *frame)
    *frame = (*frame < 74) ? (*frame + 1) : 0;
 }
 
+#ifdef CDROM_DEBUG
 static void cdrom_print_sense_data(const unsigned char *sense, size_t len)
 {
    unsigned i;
@@ -252,6 +254,7 @@ static void cdrom_print_sense_data(const unsigned char *sense, size_t len)
 
    fflush(stdout);
 }
+#endif
 
 #if defined(_WIN32) && !defined(_XBOX)
 static int cdrom_send_command_win32(const libretro_vfs_implementation_file *stream, CDROM_CMD_Direction dir, void *buf, size_t len, unsigned char *cmd, size_t cmd_len, unsigned char *sense, size_t sense_len)
@@ -519,7 +522,9 @@ retry:
       }
       else
       {
+#ifdef CDROM_DEBUG
          cdrom_print_sense_data(sense, sizeof(sense));
+#endif
 
          /* INQUIRY/TEST/SENSE should never fail, don't retry. */
          /* READ ATIP seems to fail outright on some drives with pressed discs, skip retries. */
@@ -672,7 +677,9 @@ int cdrom_get_sense(libretro_vfs_implementation_file *stream, unsigned char *sen
    if (rv)
       return 1;
 
+#ifdef CDROM_DEBUG
    cdrom_print_sense_data(buf, sizeof(buf));
+#endif
 
    return 0;
 }
@@ -1336,22 +1343,26 @@ struct string_list* cdrom_get_available_drives(void)
 
    for (i = 0; i < (int)dir_list->size; i++)
    {
-      if (strstr(dir_list->elems[i].data, "/dev/sg"))
+      if (string_starts_with_size(dir_list->elems[i].data, "/dev/sg",
+               STRLEN_CONST("/dev/sg")))
       {
-         char drive_model[32] = {0};
-         char drive_string[33] = {0};
-         union string_list_elem_attr attr = {0};
-         int dev_index = 0;
-         RFILE *file = filestream_open(dir_list->elems[i].data, RETRO_VFS_FILE_ACCESS_READ, 0);
+         char drive_string[33];
          libretro_vfs_implementation_file *stream;
-         bool is_cdrom = false;
+         char drive_model[32]             = {0};
+         union string_list_elem_attr attr = {0};
+         int dev_index                    = 0;
+         RFILE *file                      = filestream_open(
+               dir_list->elems[i].data, RETRO_VFS_FILE_ACCESS_READ, 0);
+         bool is_cdrom                    = false;
 
          found = true;
 
          if (!file)
          {
+#ifdef CDROM_DEBUG
             printf("[CDROM] Could not open %s, please check permissions.\n", dir_list->elems[i].data);
             fflush(stdout);
+#endif
             continue;
          }
 
@@ -1362,15 +1373,16 @@ struct string_list* cdrom_get_available_drives(void)
          if (!is_cdrom)
             continue;
 
-         sscanf(dir_list->elems[i].data + strlen("/dev/sg"), "%d", &dev_index);
+         sscanf(dir_list->elems[i].data + STRLEN_CONST("/dev/sg"),
+               "%d", &dev_index);
 
          dev_index = '0' + dev_index;
-         attr.i = dev_index;
+         attr.i    = dev_index;
 
          if (!string_is_empty(drive_model))
-            strlcat(drive_string, drive_model, sizeof(drive_string));
+            strlcpy(drive_string, drive_model, sizeof(drive_string));
          else
-            strlcat(drive_string, "Unknown Drive", sizeof(drive_string));
+            strlcpy(drive_string, "Unknown Drive", sizeof(drive_string));
 
          string_list_append(list, drive_string, attr);
       }
@@ -1378,29 +1390,35 @@ struct string_list* cdrom_get_available_drives(void)
 
    if (!found)
    {
-      char *buf = NULL;
+      char *buf   = NULL;
       int64_t len = 0;
 
       if (filestream_read_file("/proc/modules", (void**)&buf, &len))
       {
-         struct string_list *mods = string_split(buf, "\n");
-         bool found = false;
+#ifdef CDROM_DEBUG
+         bool found              = false;
+#endif
+         struct string_list mods = {0};
 
-         if (mods)
+         string_list_initialize(&mods);
+         
+         if (string_split_noalloc(&mods, buf, "\n"))
          {
-
-            for (i = 0; i < mods->size; i++)
+            for (i = 0; i < (int)mods.size; i++)
             {
-               if (strcasestr(mods->elems[i].data, "sg "))
+               if (strcasestr(mods.elems[i].data, "sg "))
                {
+#ifdef CDROM_DEBUG
                   found = true;
+#endif
                   break;
                }
             }
-
-            string_list_free(mods);
          }
+         string_list_deinitialize(&mods);
+         free(buf);
 
+#ifdef CDROM_DEBUG
          if (found)
          {
             printf("[CDROM] No sg devices found but kernel module is loaded.\n");
@@ -1411,12 +1429,15 @@ struct string_list* cdrom_get_available_drives(void)
             printf("[CDROM] No sg devices found and sg kernel module is not loaded.\n");
             fflush(stdout);
          }
+#endif
       }
+#ifdef CDROM_DEBUG
       else
       {
          printf("[CDROM] No sg devices found, could not check if sg kernel module is loaded.\n");
          fflush(stdout);
       }
+#endif
    }
 
    string_list_free(dir_list);
@@ -1425,13 +1446,13 @@ struct string_list* cdrom_get_available_drives(void)
    DWORD drive_mask = GetLogicalDrives();
    int i;
 
-   for (i = 0; i < sizeof(DWORD) * 8; i++)
+   for (i = 0; i < (int)(sizeof(DWORD) * 8); i++)
    {
-      char path[] = {"a:\\"};
+      char path[]       = {"a:\\"};
       char cdrom_path[] = {"cdrom://a:/drive-track01.bin"};
 
-      path[0] += i;
-      cdrom_path[8] += i;
+      path[0]          += i;
+      cdrom_path[8]    += i;
 
       /* this drive letter doesn't exist */
       if (!(drive_mask & (1 << i)))
@@ -1439,15 +1460,14 @@ struct string_list* cdrom_get_available_drives(void)
 
       if (GetDriveType(path) != DRIVE_CDROM)
          continue;
-      else
+
       {
-         char drive_model[32] = {0};
-         char drive_string[33] = {0};
+         char drive_string[33];
+         libretro_vfs_implementation_file *stream;
+         bool is_cdrom                    = false;
+         char drive_model[32]             = {0};
          union string_list_elem_attr attr = {0};
          RFILE *file = filestream_open(cdrom_path, RETRO_VFS_FILE_ACCESS_READ, 0);
-         libretro_vfs_implementation_file *stream;
-         bool is_cdrom = false;
-
          if (!file)
             continue;
 
@@ -1461,9 +1481,9 @@ struct string_list* cdrom_get_available_drives(void)
          attr.i = path[0];
 
          if (!string_is_empty(drive_model))
-            strlcat(drive_string, drive_model, sizeof(drive_string));
+            strlcpy(drive_string, drive_model, sizeof(drive_string));
          else
-            strlcat(drive_string, "Unknown Drive", sizeof(drive_string));
+            strlcpy(drive_string, "Unknown Drive", sizeof(drive_string));
 
          string_list_append(list, drive_string, attr);
       }
@@ -1503,9 +1523,7 @@ bool cdrom_drive_has_media(const char drive)
    if (file)
    {
       libretro_vfs_implementation_file *stream = filestream_get_vfs_handle(file);
-      bool has_media = false;
-
-      has_media = cdrom_is_media_inserted(stream);
+      bool has_media = cdrom_is_media_inserted(stream);
 
       filestream_close(file);
 
@@ -1517,14 +1535,14 @@ bool cdrom_drive_has_media(const char drive)
 
 bool cdrom_set_read_cache(libretro_vfs_implementation_file *stream, bool enabled)
 {
+   int i;
    /* MMC Command: MODE SENSE (10) and MODE SELECT (10) */
    unsigned char cdb_sense_changeable[] = {0x5A, 0, 0x48, 0, 0, 0, 0, 0, 0x14, 0};
-   unsigned char cdb_sense[] = {0x5A, 0, 0x8, 0, 0, 0, 0, 0, 0x14, 0};
-   unsigned char cdb_select[] = {0x55, 0x10, 0, 0, 0, 0, 0, 0, 0x14, 0};
-   unsigned char buf[20] = {0};
-   int rv, i;
-
-   rv = cdrom_send_command(stream, DIRECTION_IN, buf, sizeof(buf), cdb_sense_changeable, sizeof(cdb_sense_changeable), 0);
+   unsigned char cdb_sense[]            = {0x5A, 0, 0x8, 0, 0, 0, 0, 0, 0x14, 0};
+   unsigned char cdb_select[]           = {0x55, 0x10, 0, 0, 0, 0, 0, 0, 0x14, 0};
+   unsigned char buf[20]                = {0};
+   int rv = cdrom_send_command(stream, DIRECTION_IN, buf, sizeof(buf),
+         cdb_sense_changeable, sizeof(cdb_sense_changeable), 0);
 
 #ifdef CDROM_DEBUG
    printf("[CDROM] mode sense changeable status code %d\n", rv);
@@ -1560,9 +1578,7 @@ bool cdrom_set_read_cache(libretro_vfs_implementation_file *stream, bool enabled
    printf("Mode sense data for caching mode page: ");
 
    for (i = 0; i < (int)sizeof(buf); i++)
-   {
       printf("%02X ", buf[i]);
-   }
 
    printf("\n");
    fflush(stdout);
@@ -1575,7 +1591,7 @@ bool cdrom_set_read_cache(libretro_vfs_implementation_file *stream, bool enabled
    if (enabled)
       buf[10] &= ~1;
    else
-      buf[10] |= 1;
+      buf[10] |=  1;
 
    rv = cdrom_send_command(stream, DIRECTION_OUT, buf, sizeof(buf), cdb_select, sizeof(cdb_select), 0);
 
@@ -1624,9 +1640,7 @@ bool cdrom_get_timeouts(libretro_vfs_implementation_file *stream, cdrom_group_ti
       printf("Mode sense data for timeout groups: ");
 
       for (i = 0; i < (int)sizeof(buf); i++)
-      {
          printf("%02X ", buf[i]);
-      }
 
       printf("\n");
 
@@ -1648,8 +1662,8 @@ bool cdrom_get_timeouts(libretro_vfs_implementation_file *stream, cdrom_group_ti
 bool cdrom_has_atip(libretro_vfs_implementation_file *stream)
 {
    /* MMC Command: READ TOC/PMA/ATIP */
-   unsigned char cdb[] = {0x43, 0x2, 0x4, 0, 0, 0, 0, 0x9, 0x30, 0};
-   unsigned char buf[32] = {0};
+   unsigned char cdb[]     = {0x43, 0x2, 0x4, 0, 0, 0, 0, 0x9, 0x30, 0};
+   unsigned char buf[32]   = {0};
    unsigned short atip_len = 0;
    int rv = cdrom_send_command(stream, DIRECTION_IN, buf, sizeof(buf), cdb, sizeof(cdb), 0);
 
@@ -1659,7 +1673,10 @@ bool cdrom_has_atip(libretro_vfs_implementation_file *stream)
    atip_len = buf[0] << 8 | buf[1];
 
 #ifdef CDROM_DEBUG
-   printf("ATIP Length %d, Disc Type %d, Disc Sub-Type %d\n", atip_len, (buf[6] >> 6) & 0x1, ((buf[6] >> 5) & 0x1) << 2 | ((buf[6] >> 4) & 0x1) << 1 | ((buf[6] >> 3) & 0x1) << 0);
+   printf("ATIP Length %d, Disc Type %d, Disc Sub-Type %d\n",
+         atip_len,
+         (buf[6]  >> 6) & 0x1,
+         ((buf[6] >> 5) & 0x1) << 2 | ((buf[6] >> 4) & 0x1) << 1 | ((buf[6] >> 3) & 0x1) << 0);
 #endif
 
    if (atip_len < 5)
@@ -1670,30 +1687,23 @@ bool cdrom_has_atip(libretro_vfs_implementation_file *stream)
 
 void cdrom_device_fillpath(char *path, size_t len, char drive, unsigned char track, bool is_cue)
 {
-   size_t pos = 0;
-
    if (!path || len == 0)
       return;
-
    if (is_cue)
    {
 #ifdef _WIN32
-      pos = strlcpy(path, "cdrom://", len);
-
+      size_t pos = strlcpy(path, "cdrom://", len);
       if (len > pos)
          path[pos++] = drive;
-
       pos = strlcat(path, ":/drive.cue", len);
 #else
 #ifdef __linux__
-      pos = strlcpy(path, "cdrom://drive", len);
-
+      size_t pos = strlcpy(path, "cdrom://drive", len);
       if (len > pos + 1)
       {
          path[pos++] = drive;
-         path[pos] = '\0';
+         path[pos]   = '\0';
       }
-
       pos = strlcat(path, ".cue", len);
 #endif
 #endif
@@ -1701,22 +1711,18 @@ void cdrom_device_fillpath(char *path, size_t len, char drive, unsigned char tra
    else
    {
 #ifdef _WIN32
-      pos = strlcpy(path, "cdrom://", len);
-
+      size_t pos = strlcpy(path, "cdrom://", len);
       if (len > pos + 1)
       {
          path[pos++] = drive;
-         path[pos] = '\0';
+         path[pos]   = '\0';
       }
-
       pos += snprintf(path + pos, len - pos, ":/drive-track%02d.bin", track);
 #else
 #ifdef __linux__
-      pos = strlcpy(path, "cdrom://drive", len);
-
+      size_t pos = strlcpy(path, "cdrom://drive", len);
       if (len > pos)
          path[pos++] = drive;
-
       pos += snprintf(path + pos, len - pos, "-track%02d.bin", track);
 #endif
 #endif
