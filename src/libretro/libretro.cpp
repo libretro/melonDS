@@ -35,6 +35,9 @@ retro_input_poll_t input_poll_cb;
 retro_input_state_t input_state_cb;
 retro_log_printf_t log_cb;
 retro_video_refresh_t video_cb;
+retro_video_refresh_ext_t video_cb_ext = NULL;
+
+bool aux_stream_bottom_screen = false;
 
 std::string save_path;
 
@@ -124,11 +127,23 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    info->timing.fps            = 32.0f * 1024.0f * 1024.0f / 560190.0f;
    info->timing.sample_rate    = 32.0f * 1024.0f;
-   info->geometry.base_width   = screen_layout_data.buffer_width;
-   info->geometry.base_height  = screen_layout_data.buffer_height;
-   info->geometry.max_width    = screen_layout_data.buffer_width;
-   info->geometry.max_height   = screen_layout_data.buffer_height;
-   info->geometry.aspect_ratio = (float)screen_layout_data.buffer_width / (float)screen_layout_data.buffer_height;
+
+   if (aux_stream_bottom_screen)
+   {
+      info->geometry.base_width   = screen_layout_data.screen_width;
+      info->geometry.base_height  = screen_layout_data.screen_height;
+      info->geometry.max_width    = screen_layout_data.screen_width;
+      info->geometry.max_height   = screen_layout_data.screen_height;
+      info->geometry.aspect_ratio = (float)screen_layout_data.screen_width / (float)screen_layout_data.screen_height;
+   }
+   else
+   {
+      info->geometry.base_width   = screen_layout_data.buffer_width;
+      info->geometry.base_height  = screen_layout_data.buffer_height;
+      info->geometry.max_width    = screen_layout_data.buffer_width;
+      info->geometry.max_height   = screen_layout_data.buffer_height;
+      info->geometry.aspect_ratio = (float)screen_layout_data.buffer_width / (float)screen_layout_data.buffer_height;
+   }
 }
 
 static bool update_option_visibility(void)
@@ -311,6 +326,11 @@ void retro_set_video_refresh(retro_video_refresh_t cb)
    video_cb = cb;
 }
 
+RETRO_API void retro_set_video_refresh_ext(retro_video_refresh_ext_t cb)
+{
+   video_cb_ext = cb;
+}
+
 void retro_set_controller_port_device(unsigned port, unsigned device)
 {
    log_cb(RETRO_LOG_INFO, "Plugging device %u into port %u.\n", device, port);
@@ -369,6 +389,15 @@ static void check_variables(bool init)
       else if (!strcmp(var.value, "Hybrid Bottom"))
          layout = ScreenLayout::HybridBottom;
    }
+
+   var.key = "melonds_aux_stream_bottom_screen";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      aux_stream_bottom_screen = !strcmp(var.value, "enabled");
+   else
+      aux_stream_bottom_screen = false;
+
+   if (aux_stream_bottom_screen)
+      layout = ScreenLayout::TopOnly;
 
    var.key = "melonds_screen_gap";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -616,7 +645,7 @@ static void check_variables(bool init)
 
    input_state.current_touch_mode = new_touch_mode;
 
-   update_screenlayout(layout, &screen_layout_data, enable_opengl, swapped_screens);
+   update_screenlayout(layout, &screen_layout_data, enable_opengl, aux_stream_bottom_screen ? false : swapped_screens);
 
    update_option_visibility();
 }
@@ -659,12 +688,13 @@ static void render_frame(void)
 #ifdef HAVE_OPENGL
    if(using_opengl)
    {
+      log_cb(RETRO_LOG_INFO, "[melonDS] Using OpenGL rendering\n");
       if (current_renderer == CurrentRenderer::Software) render_opengl_frame(true);
       else render_opengl_frame(false);
    }
-   else if(!enable_opengl)
+   else
+#endif
    {
-   #endif
       int frontbuf = GPU::FrontBuffer;
 
       if(screen_layout_data.hybrid)
@@ -703,9 +733,16 @@ static void render_frame(void)
 
          video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
       }
-#ifdef HAVE_OPENGL
    }
-#endif
+
+   if (aux_stream_bottom_screen && screen_layout_data.enable_top_screen)
+   {
+      int frontbuf = GPU::FrontBuffer;
+      unsigned pitch = VIDEO_WIDTH * sizeof(uint32_t);
+
+      if (video_cb_ext)
+         video_cb_ext((uint8_t*)GPU::Framebuffer[frontbuf][1], VIDEO_WIDTH, VIDEO_HEIGHT, pitch, 1);
+   }
 }
 
 void retro_run(void)
@@ -719,7 +756,7 @@ void retro_run(void)
          if (swapped_screens == false)
          {
             swap_screen_toggled = !swap_screen_toggled;
-            update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swap_screen_toggled);
+            update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, aux_stream_bottom_screen ? false : swap_screen_toggled);
             refresh_opengl = true;
          }
 
@@ -728,7 +765,7 @@ void retro_run(void)
       else
       {
          swapped_screens = input_state.swap_screens_btn; 
-         update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, swapped_screens);
+         update_screenlayout(current_screen_layout, &screen_layout_data, enable_opengl, aux_stream_bottom_screen ? false : swapped_screens);
          refresh_opengl = true;
       }
    }
@@ -874,6 +911,16 @@ static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
    }
 
    check_variables(true);
+
+   if (aux_stream_bottom_screen)
+   {
+      struct retro_multi_screen_info info = {
+         2,
+         screen_layout_data.screen_width,
+         screen_layout_data.screen_height
+      };
+      environ_cb(RETRO_ENVIRONMENT_SET_MULTI_SCREEN_AVAILABILITY, &info);
+   }
 
    // Initialize the opengl state if needed
 #ifdef HAVE_OPENGL

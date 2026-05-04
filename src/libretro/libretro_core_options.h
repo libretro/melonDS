@@ -345,6 +345,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "Top/Bottom"
    },
    {
+      "melonds_aux_stream_bottom_screen",
+      "Stream Bottom Screen to Auxiliary Display",
+      NULL,
+      "Stream bottom screen to auxiliary display via extended callback.",
+      NULL,
+      "screen",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "melonds_screen_gap",
       "Screen Gap",
       NULL,
