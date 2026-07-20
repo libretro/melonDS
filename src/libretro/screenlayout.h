@@ -59,7 +59,8 @@ struct ScreenLayoutData
 
     bool hybrid;
     SmallScreenLayout hybrid_small_screen;
-    unsigned hybrid_ratio;
+    unsigned hybrid_ratio_large;
+    unsigned hybrid_ratio_small;
 
     unsigned buffer_width;
     unsigned buffer_height;

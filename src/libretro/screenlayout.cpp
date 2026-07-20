@@ -9,7 +9,8 @@ ScreenLayoutData screen_layout_data;
 void initialize_screnlayout_data(ScreenLayoutData *data)
 {
     data->buffer_ptr = nullptr;
-    data->hybrid_ratio = 2;
+    data->hybrid_ratio_large = 2;
+    data->hybrid_ratio_small = 1;
 }
 
 void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl, bool swap_screens)
@@ -174,14 +175,14 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
 
             data->hybrid = true;
 
-            data->buffer_width = (data->screen_width * data->hybrid_ratio) + data->screen_width + (data->hybrid_ratio * 2);
-            data->buffer_height = (data->screen_height * data->hybrid_ratio);
+            data->buffer_width = (data->screen_width * data->hybrid_ratio_large) + (data->screen_width * data->hybrid_ratio_small) + (data->hybrid_ratio_large * 2);
+            data->buffer_height = (data->screen_height * data->hybrid_ratio_large);
             data->buffer_stride = data->buffer_width * pixel_size;
 
             if (layout == ScreenLayout::HybridTop)
             {
-                data->touch_offset_x = (data->screen_width * data->hybrid_ratio) + (data->hybrid_ratio / 2);
-                data->touch_offset_y = (data->screen_height * (data->hybrid_ratio - 1));
+                data->touch_offset_x = (data->screen_width * data->hybrid_ratio_large) + (data->hybrid_ratio_large / 2);
+                data->touch_offset_y = (data->screen_height * (data->hybrid_ratio_large - 1));
             }
             else
             {
