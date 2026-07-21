@@ -14,5 +14,6 @@ extern retro_input_poll_t input_poll_cb;
 extern retro_input_state_t input_state_cb;
 extern retro_log_printf_t log_cb;
 extern retro_video_refresh_t video_cb;
+extern retro_video_refresh_ext_t video_cb_ext;
 
 #endif
