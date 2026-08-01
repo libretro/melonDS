@@ -698,7 +698,7 @@ static void render_frame(void)
          if(screen_layout_data.enable_bottom_screen)
             copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
 
-         if(cursor_enabled(&input_state) && current_screen_layout != ScreenLayout::TopOnly)
+         if(cursor_enabled(&input_state) && screen_layout_data.displayed_layout != ScreenLayout::TopOnly)
             draw_cursor(&screen_layout_data, input_state.touch_x, input_state.touch_y);
 
          video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
