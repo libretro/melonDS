@@ -79,8 +79,10 @@ ifeq ($(platform), unix)
    endif
    HAVE_THREADS=1
    ifneq ($(filter $(ARCH),x86 x86_64),)
-     LIBS += -lGL
-     HAVE_OPENGL=1
+     ifneq ($(DISABLE_OPENGL), 1)
+       LIBS += -lGL
+       HAVE_OPENGL=1
+     endif
    endif
    ifeq ($(ARCH),x86_64)
       JIT_ARCH=x64
