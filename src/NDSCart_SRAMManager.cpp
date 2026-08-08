@@ -67,7 +67,7 @@ void DeInit()
     }
 #endif
 
-    if (SecondaryBuffer) delete SecondaryBuffer;
+    if (SecondaryBuffer) delete[] SecondaryBuffer;
     SecondaryBuffer = NULL;
 
     Platform::Mutex_Free(SecondaryBufferLock);
@@ -88,7 +88,7 @@ void Setup(const char* path, u8* buffer, u32 length)
     Buffer = buffer;
     Length = length;
 
-    if(SecondaryBuffer) delete SecondaryBuffer; // Delete secondary buffer, there might be previous state.
+    if(SecondaryBuffer) delete[] SecondaryBuffer; // Delete secondary buffer, there might be previous state.
 
     SecondaryBuffer = new u8[length];
     SecondaryBufferLength = length;

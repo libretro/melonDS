@@ -55,8 +55,23 @@ void update_input(InputState *state)
       state->lid_closed = lid_closed_btn;
    }
 
+   state->previous_holding_noise_btn = state->holding_noise_btn;
    state->holding_noise_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2);
    state->swap_screens_btn = !!input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
+
+   if (  micNoiseType == MicInput && // If the player wants to use their real mic...
+         noise_button_required && // ...and they don't always want it hot...
+         (state->holding_noise_btn != state->previous_holding_noise_btn) && // ...and they just pressed or released the button...
+         micHandle != NULL && micInterface.interface_version > 0 // ...and the mic is valid...
+   )
+   {
+      bool stateSet = micInterface.set_mic_state(micHandle, state->holding_noise_btn);
+      // ...then set the state of the mic to the active staste of the noise button
+
+      if (!stateSet)
+         log_cb(RETRO_LOG_ERROR, "[melonDS] Error setting state of microphone to %s\n",
+            state->holding_noise_btn ? "enabled" : "disabled");
+   }
 
    if(current_screen_layout != ScreenLayout::TopOnly)
    {
