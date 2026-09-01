@@ -104,3 +104,7 @@ ARM_Ret:
 #endif
 
     ret
+
+#if !defined(__APPLE__) && !defined(_WIN64) && !defined(_MSC_VER)
+.section .note.GNU-stack,"",@progbits
+#endif
