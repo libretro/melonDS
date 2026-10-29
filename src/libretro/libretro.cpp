@@ -38,7 +38,11 @@ retro_video_refresh_t video_cb;
 
 std::string save_path;
 
-retro_game_info* cached_info;
+// What the game was loaded from, as NDS::Reset() wipes the cart and
+// retro_reset() has to load it again
+const void* rom_data = nullptr;
+size_t rom_size = 0;
+std::string rom_path;
 
 GPU::RenderSettings video_settings;
 
@@ -316,10 +320,19 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
    log_cb(RETRO_LOG_INFO, "Plugging device %u into port %u.\n", device, port);
 }
 
+// A frontend that can't give the game in memory gives its path instead, which
+// is read straight into the cart
+static bool load_rom()
+{
+   if (rom_data)
+      return NDS::LoadROM((const u8*)rom_data, rom_size, save_path.c_str(), Config::DirectBoot);
+   return !rom_path.empty() && NDS::LoadROM(rom_path.c_str(), save_path.c_str(), Config::DirectBoot);
+}
+
 void retro_reset(void)
 {
    NDS::Reset();
-   NDS::LoadROM((u8*)cached_info->data, cached_info->size, save_path.c_str(), Config::DirectBoot);
+   load_rom();
 }
 
 static void check_variables(bool init)
@@ -788,14 +801,6 @@ void Mic_FeedNoise()
 
 static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
 {
-   /*
-   * FIXME: Less bad than copying the whole data pointer, but still not great.
-   * NDS::Reset() calls wipes the cart buffer so on invoke we need a reload from info->data.
-   * Since retro_reset callback doesn't pass the info struct we need to cache it
-   * here.
-   */
-   cached_info = const_cast<retro_game_info*>(info);
-
    std::vector <std::string> required_roms = {"bios7.bin", "bios9.bin", "firmware.bin"};
    std::vector <std::string> missing_roms;
 
@@ -899,7 +904,15 @@ static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
    SPU::SetInterpolation(Config::AudioInterp);
    NDS::SetConsoleType(Config::ConsoleType);
    Frontend::LoadBIOS();
-   NDS::LoadROM((u8*)info->data, info->size, save_path.c_str(), Config::DirectBoot);
+   rom_data = info->data;
+   rom_size = info->size;
+   rom_path = info->path ? info->path : "";
+   if (!load_rom())
+   {
+      log_cb(RETRO_LOG_ERROR, "Couldn't load %s\n", rom_path.c_str());
+      NDS::DeInit();
+      return false;
+   }
    
    if (type == SLOT_1_2_BOOT)
    {
@@ -914,7 +927,10 @@ static bool _handle_load_game(unsigned type, const struct retro_game_info *info)
 
       gba_save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(gba_game_name) + ".srm";
 
-      NDS::LoadGBAROM((u8*)info[1].data, info[1].size, gba_game_name, gba_save_path.c_str());
+      if (info[1].data)
+         NDS::LoadGBAROM((u8*)info[1].data, info[1].size, gba_game_name, gba_save_path.c_str());
+      else if (info[1].path)
+         NDS::LoadGBAROM(info[1].path, gba_save_path.c_str());
    }
 
    return true;
