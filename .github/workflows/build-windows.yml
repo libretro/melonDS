@@ -46,7 +46,7 @@ jobs:
       run: |
         mkdir dist
         cp melonDS.exe dist/
-        windeployqt-qt5 --release --no-translations dist/melonDS.exe
+        windeployqt-qt5 --release --no-translations --no-angle --no-opengl-sw dist/melonDS.exe
         find dist -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0 |
           while IFS= read -r -d '' binary; do
             ntldd -R "$binary"
