@@ -20,28 +20,58 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v7
     - uses: msys2/setup-msys2@v2
       with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
 
     - name: Install dependencies
-      run: pacman -Sq --noconfirm git make mingw-w64-x86_64-{cmake,mesa,SDL2,qt5-static,libslirp,libarchive,libepoxy,toolchain}
+      run: pacman -Sq --noconfirm git make mingw-w64-ucrt-x86_64-{cmake,mesa,SDL2,qt5-base,qt5-tools,libslirp,libarchive,libepoxy,ntldd,toolchain}
   
     - name: Create build environment
-      working-directory: ${{runner.workspace}}
+      working-directory: ${{github.workspace}}
       run: mkdir build
 
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -G 'MSYS Makefiles' -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_STATIC=ON -DQT5_STATIC_DIR=C:/tools/msys64/mingw64/qt5-static
+      working-directory: ${{github.workspace}}/build
+      run: cmake "$GITHUB_WORKSPACE" -G 'MSYS Makefiles' -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_STATIC=OFF
 
     - name: Make
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{github.workspace}}/build
       run: make -j$(nproc --all)
 
-    - uses: actions/upload-artifact@v1
+    - name: Package dependencies
+      working-directory: ${{github.workspace}}/build
+      run: |
+        mkdir dist
+        cp melonDS.exe dist/
+        windeployqt-qt5 --release --no-translations --no-angle --no-opengl-sw dist/melonDS.exe
+        find dist -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0 |
+          while IFS= read -r -d '' binary; do
+            ntldd -R "$binary"
+          done > dependencies.txt
+        sed -n 's/.*=> \(.*\) (0x.*/\1/p' dependencies.txt | sort -u |
+          while IFS= read -r dependency; do
+            dependency=$(cygpath -u "$dependency")
+            case "$dependency" in
+              "$MINGW_PREFIX"/bin/*) cp "$dependency" dist/ ;;
+            esac
+          done
+
+    - name: Smoke test package
+      shell: pwsh
+      working-directory: ${{github.workspace}}/build/dist
+      run: |
+        $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+        $process = Start-Process .\melonDS.exe -PassThru
+        Start-Sleep -Seconds 5
+        if ($process.HasExited) {
+          throw "melonDS exited with code $($process.ExitCode)"
+        }
+        Stop-Process -Id $process.Id
+
+    - uses: actions/upload-artifact@v7
       with:
         name: melonDS-windows-x86_64
-        path: ${{runner.workspace}}\build\melonDS.exe
+        path: ${{github.workspace}}/build/dist
