@@ -11,27 +11,26 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v7
     - name: Install dependencies
       run: |
-        sudo rm -f /etc/apt/sources.list.d/dotnetdev.list /etc/apt/sources.list.d/microsoft-prod.list
-        sudo apt update
-        sudo apt install cmake libcurl4-gnutls-dev libpcap0.8-dev libsdl2-dev qt5-default libslirp0 libslirp-dev libarchive-dev libepoxy-dev --allow-downgrades
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake pkg-config libcurl4-gnutls-dev libpcap-dev libsdl2-dev qtbase5-dev libslirp-dev libarchive-dev libepoxy-dev
     - name: Create build environment
-      run: mkdir ${{runner.workspace}}/build
+      run: mkdir build
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE
+      working-directory: ${{github.workspace}}/build
+      run: cmake "$GITHUB_WORKSPACE"
     - name: Make
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{github.workspace}}/build
       run: |
         make -j$(nproc --all)
         mkdir dist
         cp melonDS dist
-    - uses: actions/upload-artifact@v1
+    - uses: actions/upload-artifact@v7
       with:
         name: melonDS-ubuntu-x86_64
-        path: ${{runner.workspace}}/build/dist
+        path: ${{github.workspace}}/build/dist
